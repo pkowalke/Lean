@@ -38,6 +38,8 @@
   <ItemGroup>
     <Content Include="Alphas\ForexCalendarAlpha.py" />
     <Content Include="Alphas\RebalancingLeveragedETFAlpha.py" />
+    <None Include="_Mom_Based_Rotation.py" />
+    <None Include="_DualThrust.py" />
     <Content Include="BasicTemplateFuturesFrameworkAlgorithm.py" />
     <Content Include="BasicTemplateOptionsFrameworkAlgorithm.py" />
     <Compile Include="Properties\AssemblyInfo.cs" />
