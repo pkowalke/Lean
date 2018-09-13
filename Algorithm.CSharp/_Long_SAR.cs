@@ -27,7 +27,7 @@ namespace QuantConnect.Algorithm.CSharp
     /// <meta name="tag" content="indicators" />
     /// <meta name="tag" content="indicator classes" />
     /// <meta name="tag" content="plotting indicators" />
-    public class _Long_MACD : QCAlgorithm, IRegressionAlgorithmDefinition
+    public class _Long_SAR : QCAlgorithm, IRegressionAlgorithmDefinition
     {
         //
         private DateTime _previous;
@@ -58,13 +58,13 @@ namespace QuantConnect.Algorithm.CSharp
         {
             SetBrokerageModel(Brokerages.BrokerageName.InteractiveBrokersBrokerage, AccountType.Margin);
 
-            SetWarmUp(30, Resolution.Minute);
+            SetWarmUp(190, Resolution.Minute);
 
             AddSecurity(SecurityType.Equity, _symbolstr, Resolution.Minute);
 
             _symbol = Symbol(_symbolstr);
 
-            SetStartDate(2018, 01, 01);
+            SetStartDate(2018, 01, 10);
             SetEndDate(2018, 09, 10);
             
             SetCash(_starting_cash);
@@ -100,14 +100,15 @@ namespace QuantConnect.Algorithm.CSharp
             var holding = Portfolio[_symbol];
 
             if (holding.Quantity == 0 &&
-                //_last_purchase.Date != data.Time.Date &&
-                _sd.IsADXBuy() &&
-                _sd.IsDMIPositiveBuy() &&
                 _sd.IsMACDLTAboveSignalBuy() &&
                 _sd.IsMACDLTCrossingThresholdBuy(1) &&
-                //_sd.IsMACDCrossingThresholdBuy(2) &&
-                _sd.IsMACDAboveSignalBuy() //&&
-                //_sd.HasMACDCrossedRecentlyBuy()
+                _sd.IsSARBuy() &&
+                _sd.IsSARJustCrossed() &&
+                    (
+                    (_sd.IsADXBuy() && _sd.IsDMIPositiveBuy()) ||
+                    (_sd.IsMACDAboveSignalBuy())
+                    )
+                //_last_purchase.Date != data.Time.Date &&
                 )
             {
                 SetHoldings(_symbol, 1.0);
@@ -115,114 +116,13 @@ namespace QuantConnect.Algorithm.CSharp
                 Debug(String.Format("{2}: Purchased {0} at {1}.", _symbol.Value, data[_symbol.Value].Close, data[_symbol.Value].EndTime));
             }
 
-            if (holding.Quantity > 0 && (_sd.IsMACDBelowSignalSell() || _sd.IsDMIPositiveSell() || _sd.IsADXSell() ))
+            if (holding.Quantity > 0 &&
+                //(_sd.IsMACDBelowSignalSell() || _sd.IsDMIPositiveSell() || _sd.IsADXSell() )
+                !_sd.IsSARBuy())
             {
                 SetHoldings(_symbol, 0.0);
                 Debug(String.Format("{2}: Sold {0} at {1}. MACDHistogramChangeRate: {3}, MACDCrossedDown: {4}.", _symbol.Value, data[_symbol.Value].Close, data[_symbol.Value].EndTime, _sd.IsMACDHistogramChangeRateSell().ToString(), _sd.IsMACDCrossingSell().ToString()));
             }
-
-            decimal histoPrev2pAvg = (_minus1_macd_histo + _minus2_macd_histo) / 2;
-
-            if ((_trend_state == 8 || _trend_state == 7 || _trend_state == 6 || _trend_state == 5) && _macd.Histogram > 0)
-                _trend_state = 1;
-            else if ((_trend_state == 1 || _trend_state == 2 || _trend_state == 3 || _trend_state == 4) && _macd.Histogram <= 0)
-                _trend_state = 5;
-            else if (_trend_state == 1 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 2;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 2 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 2;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 3 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 4 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 4;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 4;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 5 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 6;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 6 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 6;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 7 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 8 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 8;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 8;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 0 && _macd.Histogram > 0)
-            {
-                if (_minus1_macd_histo < 0 && _macd.Histogram > 0)
-                    _trend_state = 1;
-                else if (_minus1_macd_histo > 0 && _macd.Histogram < 0)
-                    _trend_state = 5;
-            }
-
-            // if our macd histogram just crossed, then let's go long
-            if (holding.Quantity <= 0 && (_trend_state == 8))
-            {
-                // longterm says buy as well
-                //SetHoldings(_symbol, 1.0);
-            }
-            // of our macd histogram flattened out on uptrend, then let's go short
-            else if (holding.Quantity >= 0 && (_trend_state == 3 || _trend_state == 4 || _trend_state == 5 || _trend_state == 6))
-            {
-                //SetHoldings(_symbol, 0);
-            }
-
-            // plot both lines
-            //Plot("MACD", _macd, _macd.Signal);
-            //Plot(_symbol, "Open", data[_symbol].Open);
-            //Plot(_symbol, _macd.Fast, _macd.Slow);
 
             //Plot("Portfolio", Portfolio.TotalPortfolioValue);
 
@@ -261,6 +161,8 @@ namespace QuantConnect.Algorithm.CSharp
             //private RollingWindow<IndicatorDataPoint> _rw_EMA26;
 
             private RollingWindow<IndicatorDataPoint> _rw_VWAP9;
+
+            private RollingWindow<IndicatorDataPoint> _rw_SAR;
 
             private RollingWindow<IndicatorDataPoint> _rw_AroonUp;
             private RollingWindow<IndicatorDataPoint> _rw_AroonDown;
@@ -339,6 +241,12 @@ namespace QuantConnect.Algorithm.CSharp
                 aroon.AroonDown.Updated += (sender, updated) => _rw_AroonDown.Add(updated);
                 _rw_AroonUp = new RollingWindow<IndicatorDataPoint>(4);
                 _rw_AroonDown = new RollingWindow<IndicatorDataPoint>(4);
+                
+                //SAR
+                var sar = _algorithm.PSAR(_symbol, 0.02m, 0.02m, 0.2m, Resolution.Minute);
+
+                sar.Updated += (sender, updated) => _rw_SAR.Add(updated);
+                _rw_SAR = new RollingWindow<IndicatorDataPoint>(4);
             }
 
             public bool UpdateSymbol()
@@ -409,7 +317,7 @@ namespace QuantConnect.Algorithm.CSharp
                     //_rw_DMI_pos[2] > _rw_DMI_pos[3] &&
                     //_rw_DMI_pos[1] > _rw_DMI_pos[2] &&
                     //_rw_DMI_pos[0] > _rw_DMI_pos[1] &&
-                    _rw_DMI_pos[0] > (_rw_DMI_neg[0] * 2.0m) ) ? true : false;
+                    _rw_DMI_pos[0] > (_rw_DMI_neg[0] * 1.5m) ) ? true : false;
             }
 
             /// <summary>
@@ -477,6 +385,17 @@ namespace QuantConnect.Algorithm.CSharp
                 return (_rw_AroonUp[0] > _rw_AroonDown[0]) ? true : false;
             }
 
+            public bool IsSARBuy()
+            {
+                return (_rw_SAR[0] < _rw[0].Close) ? true : false;
+            }
+
+            public bool IsSARJustCrossed()
+            {
+                return (_rw_SAR.Count >= 2 &&
+                    _rw_SAR[0] < _rw[0].Close &&
+                    _rw_SAR[1] >= _rw[1].Close) ? true : false;
+            }
 
 
             //Sell signals
@@ -520,112 +439,6 @@ namespace QuantConnect.Algorithm.CSharp
             //Misc signals
 
         }
-
-
-        /// <summary>
-        /// This returns the state of the trend for the symbol at the time.
-        /// 
-        /// 0 - nothing
-        /// 1 - histogram crossed 0 on the way up
-        /// 2 - histogram rising in uptrend
-        /// 3 - histogram 'flatted' in uptrend
-        /// 4 - histogram falling in uptrend
-        /// 5 - histogram crossed below 0
-        /// 6 - histogram falling in downtrend
-        /// 7 - histogram 'flatted' in the downtrend
-        /// 8 - histogram rising within downtrend
-        /// </summary>
-        /// <returns></returns>
-        /*public int GetTrendState()
-        {
-            int trend_state;
-
-            if ((_trend_state == 8 || _trend_state == 7 || _trend_state == 6 || _trend_state == 5) && _macd.Histogram > 0)
-                _trend_state = 1;
-            else if ((_trend_state == 1 || _trend_state == 2 || _trend_state == 3 || _trend_state == 4) && _macd.Histogram <= 0)
-                _trend_state = 5;
-            else if (_trend_state == 1 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 2;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 2 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 2;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 3 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 4 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 4;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 4;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 5 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 6;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 6 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 6;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 7 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 8 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 8;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 8;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 0 && _macd.Histogram > 0)
-            {
-                if (_minus1_macd_histo < 0 && _macd.Histogram > 0)
-                    _trend_state = 1;
-                else if (_minus1_macd_histo > 0 && _macd.Histogram < 0)
-                    _trend_state = 5;
-            }
-            return 0;
-        }*/
-    
 
         /// <summary>
         /// This is used by the regression test system to indicate if the open source Lean repository has the required data to run this algorithm.

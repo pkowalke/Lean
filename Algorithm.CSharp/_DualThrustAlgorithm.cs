@@ -22,34 +22,28 @@ using QuantConnect.Interfaces;
 namespace QuantConnect.Algorithm.CSharp
 {
     /// <summary>
-    /// Simple indicator demonstration algorithm of MACD
+    /// Dual Thrust Algorithm
     /// </summary>
     /// <meta name="tag" content="indicators" />
     /// <meta name="tag" content="indicator classes" />
     /// <meta name="tag" content="plotting indicators" />
-    public class _Long_MACD : QCAlgorithm, IRegressionAlgorithmDefinition
+    public class DualThrustAlgorithm : QCAlgorithm, IRegressionAlgorithmDefinition
     {
-        //
-        private DateTime _previous;
-        private DateTime _last_purchase;
-        private MovingAverageConvergenceDivergence _macd;
-        private AverageTrueRange _atr;
-        //
+        private readonly String _symbolstr = "ba";
+        private readonly String _benchmarkstr = "SPY";
+        private readonly Decimal _starting_cash = 100000m;
+        private readonly int _warmup_bars = 0;
+        private readonly DateTime _start_date = new DateTime(2018, 01, 01);
+        private readonly DateTime _end_date = new DateTime(2018, 09, 10);
 
-        private readonly string _symbolstr = "nflx";
         private Symbol _symbol;
-
         private SymbolData _sd;
 
-        private int _starting_cash = 100000;
+        private Decimal _sell_trigger = 0m;
+        private Decimal _buy_trigger = 0m;
+        private Decimal _current_open = 0m;
 
-        //
-        private int _trend_state = 0;
-
-        private decimal _minus1_macd_histo = 0;
-        private decimal _minus2_macd_histo = 0;
-        //
-
+        private DateTime _previous;
 
         /// <summary>
         /// Initialise the data and resolution required, as well as the cash and start-end dates for your algorithm. All algorithms must initialized.
@@ -57,179 +51,126 @@ namespace QuantConnect.Algorithm.CSharp
         public override void Initialize()
         {
             SetBrokerageModel(Brokerages.BrokerageName.InteractiveBrokersBrokerage, AccountType.Margin);
-
-            SetWarmUp(30, Resolution.Minute);
-
-            AddSecurity(SecurityType.Equity, _symbolstr, Resolution.Minute);
+            SetWarmUp(_warmup_bars, Resolution.Hour);
+            Settings.LiquidateEnabled = true;
+            
+            AddSecurity(SecurityType.Equity, _benchmarkstr, Resolution.Daily);
+            AddSecurity(SecurityType.Equity, _symbolstr, Resolution.Hour);
 
             _symbol = Symbol(_symbolstr);
+            foreach (QuantConnect.Securities.Security s in Securities.Values)
+            {
+                s.SetDataNormalizationMode(DataNormalizationMode.Adjusted);
+            }
 
-            SetStartDate(2018, 01, 01);
-            SetEndDate(2018, 09, 10);
+            SetBenchmark(_benchmarkstr);
+
+            SetStartDate(_start_date);
+            SetEndDate(_end_date);
             
             SetCash(_starting_cash);
 
-            SetBenchmark(_symbol.Value);
+            //_sd = new SymbolData(_symbol, this);
 
-            _sd = new SymbolData(_symbol, this);
+            Schedule.On(Schedule.DateRules.EveryDay(_symbol), Schedule.TimeRules.AfterMarketOpen(_symbol, 0, false), SetSignal);
 
-            // define our daily macd(12,26) with a 9 day signal
-            _macd = MACD(_symbol, 12, 26, 9, MovingAverageType.Exponential, Resolution.Minute);
-            _atr = ATR(_symbol, 9, MovingAverageType.Simple, Resolution.Minute);
-            _last_purchase = DateTime.Today;
+            _previous = Time.AddDays(-1);
+        }
+
+        public void SetSignal()
+        {
+            var history = History(_symbol.Value, 4, Resolution.Daily);
+
+            Decimal k1 = 0.5m;
+            Decimal k2 = 0.5m;
+
+            Decimal HH = 0m;
+            Decimal HC = 0m;
+            Decimal LC = 0m;
+            Decimal LL = 0m;
+
+            foreach (TradeBar t in history)
+            {
+                HH = (t.High > HH) ? t.High : HH;
+                HC = (t.Close > HC) ? t.Close : HC;
+                LC = (LC == 0 || t.Close < LC ) ? t.Close : LC;
+                LL = (LL == 0 || t.Low < LL) ? t.Low : LL;
+            }
+
+            _current_open = Portfolio[_symbol].Price;
+
+            Decimal signalRange = (HH - LC >= HC - LL) ? HH - LC : HC - LL;
+
+            _sell_trigger = (_current_open > 0)?_current_open - k1 * signalRange : 0;
+            _buy_trigger = (_current_open > 0) ? _current_open + k2 * signalRange : 0;
         }
 
         /// <summary>
         /// OnData event is the primary entry point for your algorithm. Each new data point will be pumped in here.
         /// </summary>
         /// <param name="data">TradeBars IDictionary object with your stock data</param>
-        public void OnData(TradeBars data)
+        public void OnData(QuantConnect.Data.Slice data)
         {
-            _sd.UpdateSymbol();
+            //_sd.UpdateSymbol();
 
             // after warmup only
-            if (IsWarmingUp)
-                return;
+            if (IsWarmingUp) return;
 
             // only once per day
-            //if (_previous.Date == Time.Date) return;
+            //if (_previous.Date == Time.Date && _previous.Hour == Time.Hour) return;
+            if (!data.ContainsKey(_symbol)) return;
 
             // only after macd is ready
-            if (!_macd.IsReady) return;
+            //if (!_macd.IsReady) return;
 
-            var holding = Portfolio[_symbol];
+            var holding = Portfolio[_symbol].Quantity;
 
-            if (holding.Quantity == 0 &&
+            if (
+                _buy_trigger > 0 &&
+                data[_symbol.Value].Close >= _buy_trigger
                 //_last_purchase.Date != data.Time.Date &&
-                _sd.IsADXBuy() &&
-                _sd.IsDMIPositiveBuy() &&
-                _sd.IsMACDLTAboveSignalBuy() &&
-                _sd.IsMACDLTCrossingThresholdBuy(1) &&
+                //_sd.IsADXBuy() &&
+                //_sd.IsDMIPositiveBuy() &&
+                //_sd.IsMACDLTAboveSignalBuy() &&
+                //_sd.IsMACDLTCrossingThresholdBuy(1) &&
                 //_sd.IsMACDCrossingThresholdBuy(2) &&
-                _sd.IsMACDAboveSignalBuy() //&&
+                //_sd.IsMACDAboveSignalBuy() //&&
                 //_sd.HasMACDCrossedRecentlyBuy()
                 )
             {
-                SetHoldings(_symbol, 1.0);
-                _last_purchase = data.Time.Date;
-                Debug(String.Format("{2}: Purchased {0} at {1}.", _symbol.Value, data[_symbol.Value].Close, data[_symbol.Value].EndTime));
+                if (holding >= 0)
+                {
+                    SetHoldings(_symbol, 0.9);
+                }
+                else
+                {
+                    Liquidate(_symbol);
+                    SetHoldings(_symbol, 0.9);
+                }
+                Debug(String.Format("{0}: Purchased {1} at {3}. Current holding Qty ({2}).", data[_symbol.Value].EndTime, _symbol.Value, Portfolio[_symbol].Quantity.ToString(), data[_symbol.Value].Close));
             }
 
-            if (holding.Quantity > 0 && (_sd.IsMACDBelowSignalSell() || _sd.IsDMIPositiveSell() || _sd.IsADXSell() ))
-            {
-                SetHoldings(_symbol, 0.0);
-                Debug(String.Format("{2}: Sold {0} at {1}. MACDHistogramChangeRate: {3}, MACDCrossedDown: {4}.", _symbol.Value, data[_symbol.Value].Close, data[_symbol.Value].EndTime, _sd.IsMACDHistogramChangeRateSell().ToString(), _sd.IsMACDCrossingSell().ToString()));
-            }
+            holding = Portfolio[_symbol].Quantity;
 
-            decimal histoPrev2pAvg = (_minus1_macd_histo + _minus2_macd_histo) / 2;
-
-            if ((_trend_state == 8 || _trend_state == 7 || _trend_state == 6 || _trend_state == 5) && _macd.Histogram > 0)
-                _trend_state = 1;
-            else if ((_trend_state == 1 || _trend_state == 2 || _trend_state == 3 || _trend_state == 4) && _macd.Histogram <= 0)
-                _trend_state = 5;
-            else if (_trend_state == 1 && _macd.Histogram > 0)
+            if (
+                _sell_trigger > 0 &&
+                data[_symbol.Value].Close < _sell_trigger &&
+                holding >=0
+                )
             {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 2;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
+                if (holding >= 0)
+                {
+                    Liquidate(_symbol);
+                    SetHoldings(_symbol, -0.9);
+                }
+                else
+                {
+                    SetHoldings(_symbol, -0.9);
+                }
+                Debug(String.Format("{0}: Sold {1} at {3}. Current holding Qty ({2}).", data[_symbol.Value].EndTime, _symbol.Value, Portfolio[_symbol].Quantity.ToString(), data[_symbol.Value].Close));
             }
-            else if (_trend_state == 2 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 2;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 3 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 4 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 4;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 4;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 5 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 6;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 6 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 6;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 7 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 8 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 8;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 8;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 0 && _macd.Histogram > 0)
-            {
-                if (_minus1_macd_histo < 0 && _macd.Histogram > 0)
-                    _trend_state = 1;
-                else if (_minus1_macd_histo > 0 && _macd.Histogram < 0)
-                    _trend_state = 5;
-            }
-
-            // if our macd histogram just crossed, then let's go long
-            if (holding.Quantity <= 0 && (_trend_state == 8))
-            {
-                // longterm says buy as well
-                //SetHoldings(_symbol, 1.0);
-            }
-            // of our macd histogram flattened out on uptrend, then let's go short
-            else if (holding.Quantity >= 0 && (_trend_state == 3 || _trend_state == 4 || _trend_state == 5 || _trend_state == 6))
-            {
-                //SetHoldings(_symbol, 0);
-            }
-
-            // plot both lines
-            //Plot("MACD", _macd, _macd.Signal);
-            //Plot(_symbol, "Open", data[_symbol].Open);
-            //Plot(_symbol, _macd.Fast, _macd.Slow);
-
-            //Plot("Portfolio", Portfolio.TotalPortfolioValue);
 
             _previous = Time;
-
-            _minus2_macd_histo = _minus1_macd_histo;
-            _minus1_macd_histo = _macd.Histogram;
         }
 
         public class SymbolData
@@ -371,6 +312,7 @@ namespace QuantConnect.Algorithm.CSharp
                 }
             }
 
+            //
             //Buy signals
 
             /// <summary>
@@ -477,8 +419,7 @@ namespace QuantConnect.Algorithm.CSharp
                 return (_rw_AroonUp[0] > _rw_AroonDown[0]) ? true : false;
             }
 
-
-
+            //
             //Sell signals
 
             /// <summary>
@@ -517,115 +458,11 @@ namespace QuantConnect.Algorithm.CSharp
                 //certain percentage above DMI- in order for the signal
                 return (_rw_DMI_pos[0] < (_rw_DMI_neg[0])) ? true : false;
             }
+
+            //
             //Misc signals
 
         }
-
-
-        /// <summary>
-        /// This returns the state of the trend for the symbol at the time.
-        /// 
-        /// 0 - nothing
-        /// 1 - histogram crossed 0 on the way up
-        /// 2 - histogram rising in uptrend
-        /// 3 - histogram 'flatted' in uptrend
-        /// 4 - histogram falling in uptrend
-        /// 5 - histogram crossed below 0
-        /// 6 - histogram falling in downtrend
-        /// 7 - histogram 'flatted' in the downtrend
-        /// 8 - histogram rising within downtrend
-        /// </summary>
-        /// <returns></returns>
-        /*public int GetTrendState()
-        {
-            int trend_state;
-
-            if ((_trend_state == 8 || _trend_state == 7 || _trend_state == 6 || _trend_state == 5) && _macd.Histogram > 0)
-                _trend_state = 1;
-            else if ((_trend_state == 1 || _trend_state == 2 || _trend_state == 3 || _trend_state == 4) && _macd.Histogram <= 0)
-                _trend_state = 5;
-            else if (_trend_state == 1 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 2;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 2 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 2;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 3 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 3;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 4 && _macd.Histogram > 0)
-            {
-                if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 4;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 4;
-                else if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 4;
-            }
-            else if (_trend_state == 5 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 6;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 6 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 6;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 7 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 7;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 8 && _macd.Histogram <= 0)
-            {
-                if (_macd.Histogram < histoPrev2pAvg)
-                    _trend_state = 8;
-                else if (_macd.Histogram == histoPrev2pAvg)
-                    _trend_state = 8;
-                else if (_macd.Histogram > histoPrev2pAvg)
-                    _trend_state = 8;
-            }
-            else if (_trend_state == 0 && _macd.Histogram > 0)
-            {
-                if (_minus1_macd_histo < 0 && _macd.Histogram > 0)
-                    _trend_state = 1;
-                else if (_minus1_macd_histo > 0 && _macd.Histogram < 0)
-                    _trend_state = 5;
-            }
-            return 0;
-        }*/
-    
 
         /// <summary>
         /// This is used by the regression test system to indicate if the open source Lean repository has the required data to run this algorithm.
