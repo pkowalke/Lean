@@ -86,6 +86,7 @@ namespace QuantConnect.Algorithm.CSharp
                 AddEquity(s, _resolution, Market.USA, fillDataForward: true, leverage: 0, extendedMarketHours: false);
                 _momentum.Add(s, MOM(Symbol(s), _momentumPeriod, _resolution));
             }
+            AddEquity("BA", Resolution.Minute, Market.USA, fillDataForward: true, leverage: 0, extendedMarketHours: false);
 
             Schedule.On(DateRules.EveryDay("BA"), TimeRules.BeforeMarketClose("BA", 1), Rebalance);
         }
