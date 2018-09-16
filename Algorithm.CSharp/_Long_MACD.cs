@@ -285,12 +285,6 @@ namespace QuantConnect.Algorithm.CSharp
                 }
             }
 
-            public bool UpdateMACDHistogramRateOfChange()
-            {
-                _rw_MACD_histogram_rate_of_change
-                return true;
-            }
-
             /// <summary>
             /// This returns the state of the trend for the symbol at the time.
             /// 
