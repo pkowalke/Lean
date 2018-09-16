@@ -354,6 +354,7 @@ namespace QuantConnect.Algorithm.CSharp
                 }
             }
 
+<<<<<<< Updated upstream
             /// <summary>
             /// Rate of change of histogram values is calculated as follows:
             /// [(Current value)-(Previous value)]/|(Previous value)|
@@ -373,6 +374,8 @@ namespace QuantConnect.Algorithm.CSharp
 
             //Buy signals
 
+=======
+>>>>>>> Stashed changes
             /// <summary>
             /// 
             /// ADX Criteria :
