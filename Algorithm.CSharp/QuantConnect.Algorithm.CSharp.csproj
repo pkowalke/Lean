@@ -215,8 +215,6 @@
     <Compile Include="Benchmarks\CoarseFineUniverseSelectionBenchmark.cs" />
     <Compile Include="Benchmarks\IndicatorRibbonBenchmark.cs" />
     <Compile Include="_Mom_Based_Rotation.cs" />
-    <Compile Include="_DualThrustAlgorithm.cs" />
-    <Compile Include="_Long_SAR.cs" />
     <Compile Include="_Long_MACD.cs" />
     <Compile Include="_Long_Price_Crosses_MAs.cs" />
   </ItemGroup>

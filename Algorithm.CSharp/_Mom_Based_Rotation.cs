@@ -16,6 +16,7 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Threading;
 
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
@@ -76,6 +77,7 @@ namespace QuantConnect.Algorithm.CSharp
 
         public override void Initialize()
         {
+            SetBrokerageModel(Brokerages.BrokerageName.InteractiveBrokersBrokerage, AccountType.Margin);
             SetStartDate(_startDate);
             SetEndDate(_endDate);
             SetCash(_backtestCash);
@@ -86,46 +88,106 @@ namespace QuantConnect.Algorithm.CSharp
                 AddEquity(s, _resolution, Market.USA, fillDataForward: true, leverage: 0, extendedMarketHours: false);
                 _momentum.Add(s, MOM(Symbol(s), _momentumPeriod, _resolution));
             }
-            AddEquity("BA", Resolution.Minute, Market.USA, fillDataForward: true, leverage: 0, extendedMarketHours: false);
 
-            Schedule.On(DateRules.EveryDay("BA"), TimeRules.BeforeMarketClose("BA", 1), Rebalance);
+            Schedule.On(DateRules.EveryDay("BA"), TimeRules.BeforeMarketClose("BA", 240), Rebalance);
         }
 
         public void Rebalance()
         {
             if (IsWarmingUp) return;
 
-            List<String> investedHoldings =
+            List<Orders.OrderTicket> ongoingOrders = 
+                Transactions
+                .GetOrderTickets(x => 
+                x.Status == Orders.OrderStatus.CancelPending ||
+                x.Status == Orders.OrderStatus.Invalid ||
+                x.Status == Orders.OrderStatus.New ||
+                x.Status == Orders.OrderStatus.None ||
+                x.Status == Orders.OrderStatus.PartiallyFilled ||
+                x.Status == Orders.OrderStatus.Submitted).ToList();
+
+            foreach (Orders.OrderTicket ot in ongoingOrders)
+            {
+                ot.Cancel();
+                int cancelTimeout = 60000; //if order does not get cancelled after 1 minute, than notify the user.
+                while (ot.Status != Orders.OrderStatus.Canceled)
+                {
+                    cancelTimeout -= 5000;
+                    Thread.Sleep(5000);
+                    Debug(String.Format("{0} Order ticket: {1} has been issued cancel request. Waiting for the order to get cancelled.", Time.ToString(), ot.OrderId.ToString()));
+                    if (cancelTimeout <= 0) Debug(String.Format("{0} * Warning * Order ticket: {1}, tag: {2} failed to cancel after 1 minute or more.", Time.ToString(), ot.OrderId.ToString(), ot.Tag.ToString()));
+                }
+            }
+
+            Dictionary<String, Decimal> investedHoldings =
                 (from ih in Portfolio
                  where ih.Value.Invested == true
-                 select ih.Value.Symbol.Value.ToString())
-                .ToList<String>();
+                 select new { symbol = ih.Value.Symbol.Value.ToString(), qty = ih.Value.Quantity })
+                .ToDictionary(t => t.symbol, t => t.qty);
 
-            List<String> topPicks =
+            Dictionary<String, Decimal> topPicks =
                 (from top_pair in _momentum
+                 where top_pair.Value > 0
                  orderby top_pair.Value descending
-                 select top_pair.Key.ToString())
+                 select new { symbol = top_pair.Key.ToString(), qty = CalculateOrderQuantity(top_pair.Key.ToString(), 1m / _numberOfTopStocks) })
                 .Take(_numberOfTopStocks)
-                .ToList<String>();
+                .ToDictionary(t => t.symbol, t => t.qty);
 
-            List<String> liquidateHoldings =
+            Dictionary<String, Decimal> liquidateHoldings =
                 (from ih in investedHoldings
-                 where !topPicks.Contains(ih)
-                 select ih.ToString())
-                .ToList<String>();
+                 where !topPicks.ContainsKey(ih.Key)
+                 select new { symbol = ih.Key, qty = ih.Value })
+                .ToDictionary(t => t.symbol, t => t.qty);
 
-            List<String> acquireHoldings =
+            Decimal estimatedProceeds = 
+                (from p in Portfolio
+                 join lh in liquidateHoldings
+                 on p.Value.Symbol.Value.ToString() equals lh.Key
+                 select p.Value.HoldingsValue).Sum();
+
+            int numberOfSymbolsToAcquire =
                 (from tp in topPicks
-                 where !investedHoldings.Contains(tp)
-                 select tp.ToString())
-                .ToList<String>();
+                where !investedHoldings.ContainsKey(tp.Key)
+                select tp.Key.ToString())
+                .Count();
 
-            foreach (var s in liquidateHoldings) Liquidate(s.ToString());
+            Decimal estimatedRemainingPower = estimatedProceeds + Portfolio.Cash - _numberOfTopStocks * 4; // keep 4 * number of top stocks to cover fees
 
-            Double remainingCash = Convert.ToDouble(Portfolio.Cash);
-            Double totalPortfolioValue = Convert.ToDouble(Portfolio.TotalPortfolioValue);
+            Dictionary<String, Decimal> acquireHoldings =
+                (from tp in topPicks
+                 where !investedHoldings.ContainsKey(tp.Key)
+                 select new { symbol = tp.Key.ToString(), qty = CalculateOrderQuantity(tp.Key.ToString(), (1.0m / numberOfSymbolsToAcquire) * (estimatedRemainingPower / Portfolio.TotalPortfolioValue)) })
+                .ToDictionary(t => t.symbol, t => t.qty);
 
-            foreach (var s in acquireHoldings) SetHoldings(s.ToString(), (1.0 * remainingCash / totalPortfolioValue) / Convert.ToDouble(acquireHoldings.Count()));
+            PlaceOrders(liquidateHoldings, acquireHoldings);
+
+            //foreach (var s in liquidateHoldings) Liquidate(s.ToString());
+
+            //Double remainingCash = Convert.ToDouble(Portfolio.Cash);
+            //Double totalPortfolioValue = Convert.ToDouble(Portfolio.TotalPortfolioValue);
+
+            //foreach (var s in acquireHoldings) SetHoldings(s.ToString(), (1.0 * remainingCash / totalPortfolioValue) / Convert.ToDouble(acquireHoldings.Count()));
+        }
+
+        public void PlaceOrders(Dictionary<String, Decimal> sell, Dictionary<String, Decimal> buy)
+        {
+            
+            foreach (var s in sell)
+            {
+                if (s.Value <= 0)
+                    Debug(String.Format("{0} * Warning * Invalid quantity. Symbol: {1}, Qty: {2}", Time.ToString(), s.Key, s.Value.ToString()));
+                else
+                    Debug(String.Format("{0} Placing sell order. Symbol: {1}, Qty: {2} Ticket #{3}.", Time.ToString() ,s.Key, s.Value.ToString(), MarketOrder(s.Key, -1m * s.Value, asynchronous: false).OrderId.ToString()));
+                
+            }
+
+            foreach (var s in buy)
+            {
+                if (s.Value <= 0)
+                    Debug(String.Format("{0} * Warning * Invalid quantity. Symbol: {1}, Qty: {2}", Time.ToString(), s.Key, s.Value.ToString()));
+                else
+                    Debug(String.Format("{0} Placing buy order. Symbol: {1}, Qty: {2} Ticket #{3}.", Time.ToString(), s.Key, s.Value.ToString(), MarketOrder(s.Key, s.Value, asynchronous: false).OrderId.ToString()));
+            }
         }
 
         public override void OnData(Slice data)
@@ -152,6 +214,8 @@ namespace QuantConnect.Algorithm.CSharp
         {
             ;
         }
+
+        
 
         public bool CanRunLocally { get; } = true;
 
