@@ -22,6 +22,8 @@ using QuantConnect.Data;
 using QuantConnect.Data.Market;
 using QuantConnect.Indicators;
 using QuantConnect.Interfaces;
+using QuantConnect.Securities;
+
 
 namespace QuantConnect.Algorithm.CSharp
 {
@@ -30,8 +32,8 @@ namespace QuantConnect.Algorithm.CSharp
     /// <meta name="tag" content="Momentum" />
     public class _Mom_Based_Rotation : QCAlgorithm, IRegressionAlgorithmDefinition
     {
-        private readonly DateTime _startDate = new DateTime(2007, 12, 01);
-        private readonly DateTime _endDate = new DateTime(2011, 12, 31);
+        private readonly DateTime _startDate = new DateTime(2018, 08, 15);
+        private readonly DateTime _endDate = new DateTime(2018, 09, 16);
         private readonly Resolution _resolution = Resolution.Daily;
 
         private readonly Decimal _backtestCash = 10000m;
@@ -70,7 +72,7 @@ namespace QuantConnect.Algorithm.CSharp
 			"TSLA",  //"Tesla"
 			"IVV" //Shares of SP500
         };
-        private readonly int _numberOfTopStocks = 4;
+        private readonly int _numberOfTopStocks = 2;
 
         private Dictionary<String, Momentum> _momentum = new Dictionary<String, Momentum>();
         private readonly int _momentumPeriod = 6 * 21;

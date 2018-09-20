@@ -74,6 +74,7 @@
     <Compile Include="Alphas\AlphaModel.cs" />
     <Compile Include="Alphas\AlphaModelExtensions.cs" />
     <Compile Include="Alphas\AlphaModelPythonWrapper.cs" />
+    <Compile Include="Alphas\_Mom_Based_Rotation_AM.cs" />
     <Compile Include="Alphas\PearsonCorrelationPairsTradingAlphaModel.cs" />
     <Compile Include="Alphas\CompositeAlphaModel.cs" />
     <Compile Include="Alphas\EmaCrossAlphaModel.cs" />
@@ -83,6 +84,7 @@
     <Compile Include="Alphas\RsiAlphaModel.cs" />
     <Compile Include="Execution\ExecutionModel.cs" />
     <Compile Include="Execution\IExecutionModel.cs" />
+    <Compile Include="Execution\_Mom_Based_Rotation_EM.cs" />
     <Compile Include="Execution\ImmediateExecutionModel.cs" />
     <Compile Include="Execution\NullExecutionModel.cs" />
     <Compile Include="Execution\ExecutionModelPythonWrapper.cs" />
@@ -91,6 +93,7 @@
     <Compile Include="INotifiedSecurityChanges.cs" />
     <Compile Include="NotifiedSecurityChanges.cs" />
     <Compile Include="Portfolio\BlackLittermanOptimizationPortfolioConstructionModel.cs" />
+    <Compile Include="Portfolio\_Mom_Based_Rotation_PCM.cs" />
     <Compile Include="Portfolio\IPortfolioConstructionModel.cs" />
     <Compile Include="Portfolio\IPortfolioOptimizer.cs" />
     <Compile Include="Portfolio\UnconstrainedMeanVariancePortfolioOptimizer.cs" />
@@ -124,6 +127,7 @@
     <Compile Include="Alphas\IAlphaModel.cs" />
     <Compile Include="Selection\FutureUniverseSelectionModel.cs" />
     <Compile Include="Selection\OptionUniverseSelectionModel.cs" />
+    <Compile Include="Selection\_Mom_Based_Rotation_SM.cs" />
     <Compile Include="Selection\ScheduledUniverseSelectionModel.cs" />
     <Compile Include="Selection\UniverseSelectionModel.cs" />
     <Compile Include="Selection\UniverseSelectionModelPythonWrapper.cs" />
