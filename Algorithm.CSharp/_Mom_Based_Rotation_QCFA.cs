@@ -31,17 +31,18 @@ using QuantConnect.Data.Market;
 using QuantConnect.Indicators;
 using QuantConnect.Interfaces;
 using QuantConnect.Securities;
+using QuantConnect.Scheduling;
 
 
-namespace QuantConnect.Algorithm.CSharp
+namespace QuantConnect.Algorithm.Framework
 {
 
     /// <meta name="tag" content="MOM" />
     /// <meta name="tag" content="Momentum" />
     public class _Mom_Based_Rotation_QCFA : QCAlgorithmFramework
     {
-        private readonly DateTime _startDate = new DateTime(2018, 08, 15);
-        private readonly DateTime _endDate = new DateTime(2018, 09, 16);
+        private readonly DateTime _startDate = new DateTime(2018, 01, 01);
+        private readonly DateTime _endDate = new DateTime(2018, 09, 18);
         private readonly Resolution _resolution = Resolution.Minute;
 
         private readonly Decimal _backtestCash = 10000m;
@@ -80,29 +81,56 @@ namespace QuantConnect.Algorithm.CSharp
 			"TSLA",  //"Tesla"
 			"IVV" //Shares of SP500
         };
-        
+
         private readonly int _momentumPeriod = 6 * 21;
         private readonly Resolution _momentumResolution = Resolution.Daily;
-        private readonly int _numberOfTopStocks = 2;
+        private readonly int _numberOfTopStocks = 6;
+
+        private readonly int _emitHour = 9;
+        private readonly int _emitMinute = 00;
+        private readonly DayOfWeek [] _emitDaysOfWeek = new DayOfWeek [] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
+        private Scheduling.ITimeRule _emitTime;
+        private Scheduling.IDateRule _emitDate;
+        private readonly DateTime _rebalanceTime = new DateTime(001, 01, 01, 09, 32, 00, 000); //set hour and min
 
         public override void Initialize()
         {
             SetBrokerageModel(Brokerages.BrokerageName.InteractiveBrokersBrokerage, AccountType.Margin);
+
             SetStartDate(_startDate);
             SetEndDate(_endDate);
             SetCash(_backtestCash);
-            SetWarmup(_momentumPeriod);
+            //SetTimeZone(TimeZones.NewYork);
+
+            _emitTime = TimeRules.At(_emitHour, _emitMinute);
+            _emitDate = DateRules.Every(_emitDaysOfWeek);
 
             UniverseSettings.Resolution = _resolution;
             UniverseSettings.ExtendedMarketHours = false;
+            UniverseSettings.FillForward = true;
 
             SetUniverseSelection(new _Mom_Based_Rotation_SM(_symbolStrs.Select(s => QuantConnect.Symbol.Create(s, SecurityType.Equity, Market.USA)), this.UniverseSettings, this.SecurityInitializer));
-            SetAlpha(new _Mom_Based_Rotation_AM(_numberOfTopStocks, _momentumPeriod, _momentumResolution, _resolution));
+            SetAlpha(new _Mom_Based_Rotation_AM(_momentumPeriod, _momentumResolution, _resolution));
+            SetRiskManagement(new _Mom_Based_Rotation_RM(0.1m));
             SetPortfolioConstruction(new _Mom_Based_Rotation_PCM());
-
             SetExecution(new _Mom_Based_Rotation_EM());
 
-            SetRiskManagement(new MaximumDrawdownPercentPerSecurity(0.1m));
+            Schedule.On(_emitDate, _emitTime, EmitInsights);            
+        }
+
+        public void EmitInsights()
+        {
+            //if market is open today for at least single security send insights
+            if ((from s in Portfolio.Securities.Values
+                 where s.Exchange.DateIsOpen(Time.Date)
+                 select s)
+                 .Count() >= 1)
+            {
+                Execution.Execute(this,
+                RiskManagement.ManageRisk(this,
+                    PortfolioConstruction.CreateTargets(this,
+                    Alpha.Update(this, null).ToArray<Insight>()).ToArray<IPortfolioTarget>()).ToArray<IPortfolioTarget>());
+            }
         }
 
         public override void OnData(Slice data)

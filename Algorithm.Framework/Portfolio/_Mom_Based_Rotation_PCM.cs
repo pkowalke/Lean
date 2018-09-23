@@ -29,10 +29,11 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
     /// </summary>
     public class _Mom_Based_Rotation_PCM : PortfolioConstructionModel
     {
+        private readonly InsightCollection _insightCollection = new InsightCollection();
+
         private DateTime _rebalancingTime;
         private readonly TimeSpan _rebalancingPeriod;
-        private List<Symbol> _removedSymbols;
-        private readonly InsightCollection _insightCollection = new InsightCollection();
+        private List<Symbol> _removedSymbols;        
         private DateTime? _nextExpiryTime;
 
         /// <summary>
@@ -52,7 +53,7 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
         /// <returns>An enumerable of portoflio targets to be sent to the execution model</returns>
         public override IEnumerable<IPortfolioTarget> CreateTargets(QCAlgorithmFramework algorithm, Insight[] insights)
         {
-            var targets = new List<IPortfolioTarget>();
+            /*var targets = new List<IPortfolioTarget>();
 
             if (algorithm.UtcTime <= _nextExpiryTime &&
                 algorithm.UtcTime <= _rebalancingTime &&
@@ -114,6 +115,8 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
             _rebalancingTime = algorithm.UtcTime.Add(_rebalancingPeriod);
 
             return targets;
+            */
+            return new PortfolioTarget[] { };
         }
 
         /// <summary>

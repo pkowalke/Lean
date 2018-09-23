@@ -75,7 +75,9 @@ namespace QuantConnect.Algorithm.CSharp
         private readonly int _numberOfTopStocks = 2;
 
         private Dictionary<String, Momentum> _momentum = new Dictionary<String, Momentum>();
+        private Dictionary<String, Decimal> _momentum2 = new Dictionary<String, Decimal>();
         private readonly int _momentumPeriod = 6 * 21;
+        private Dictionary<String, RollingWindow<TradeBar>> _rws = new Dictionary<string, RollingWindow<TradeBar>>();
 
         public override void Initialize()
         {
@@ -89,14 +91,24 @@ namespace QuantConnect.Algorithm.CSharp
             {
                 AddEquity(s, _resolution, Market.USA, fillDataForward: true, leverage: 0, extendedMarketHours: false);
                 _momentum.Add(s, MOM(Symbol(s), _momentumPeriod, _resolution));
+
+                _rws.Add(s, new RollingWindow<TradeBar>(_momentumPeriod+1));
             }
 
-            Schedule.On(DateRules.EveryDay("BA"), TimeRules.BeforeMarketClose("BA", 240), Rebalance);
+            Schedule.On(DateRules.Every(DayOfWeek.Wednesday), TimeRules.AfterMarketOpen("BA", 1), Rebalance);
         }
 
         public void Rebalance()
         {
             if (IsWarmingUp) return;
+
+            foreach (String s in _symbolStrs)
+            {
+                if (CurrentSlice.Bars.ContainsKey(s))
+                {
+                    _momentum2[s] = _rws[s][0].Value - _rws[s][_momentumPeriod].Value;
+                }
+            }
 
             List<Orders.OrderTicket> ongoingOrders = 
                 Transactions
@@ -194,7 +206,13 @@ namespace QuantConnect.Algorithm.CSharp
 
         public override void OnData(Slice data)
         {
-            ;
+            foreach (String s in _symbolStrs)
+            {
+                if (data.ContainsKey(Symbol(s)))
+                {
+                    _rws[s].Add(data.Bars[s]);
+                }
+            }
         }
 
         public void OnData(Dividends slice)

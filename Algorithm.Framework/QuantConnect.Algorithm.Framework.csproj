@@ -110,6 +110,7 @@
     <Compile Include="QCAlgorithmFramework.cs" />
     <Compile Include="QCAlgorithmFrameworkBridge.cs" />
     <Compile Include="Risk\IRiskManagementModel.cs" />
+    <Compile Include="Risk\_Mom_Based_Rotation_RM.cs" />
     <Compile Include="Risk\MaximumDrawdownPercentPerSecurity.cs" />
     <Compile Include="Risk\MaximumSectorExposureRiskManagementModel.cs" />
     <Compile Include="Risk\NullRiskManagementModel.cs" />
