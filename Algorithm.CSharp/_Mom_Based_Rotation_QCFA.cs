@@ -86,8 +86,8 @@ namespace QuantConnect.Algorithm.Framework
         private readonly Resolution _momentumResolution = Resolution.Daily;
         private readonly int _numberOfTopStocks = 6;
 
-        private readonly int _emitHour = 9;
-        private readonly int _emitMinute = 00;
+        private readonly int _emitHour = 8;
+        private readonly int _emitMinute = 30;
         private readonly DayOfWeek [] _emitDaysOfWeek = new DayOfWeek [] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
         private Scheduling.ITimeRule _emitTime;
         private Scheduling.IDateRule _emitDate;
@@ -100,7 +100,7 @@ namespace QuantConnect.Algorithm.Framework
             SetStartDate(_startDate);
             SetEndDate(_endDate);
             SetCash(_backtestCash);
-            //SetTimeZone(TimeZones.NewYork);
+            SetTimeZone(TimeZones.NewYork);
 
             _emitTime = TimeRules.At(_emitHour, _emitMinute);
             _emitDate = DateRules.Every(_emitDaysOfWeek);

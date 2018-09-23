@@ -79,6 +79,11 @@ namespace QuantConnect.Algorithm.Framework.Alphas
 
                 foreach (SymbolData sd in _symbolDataBySymbol.Values)
                 {
+                    // Just in case (taught by problems with scheduler firing events at the right time in backtest)
+                    // scan the consolidator for changes.
+                    sd.ScanUpdateConsolidator();
+
+                    // Mark as missing data where consolidator did not consolidate on the day following previous trading day
                     if (sd.TBConsolidator.Consolidated.EndTime.Date == sd.Security.Exchange.Hours.GetPreviousTradingDay(algorithm.Time.Date).AddDays(1).Date)
                     {
                         stocksWithData.Add(sd.Security.Symbol.Value);
@@ -103,6 +108,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                         }
                     }
 
+                    // Mark as closed exchange if particular symbol's exchange happens to be closed.
                     if (sd.Security.Exchange.DateIsOpen(algorithm.Time.Date))
                     {
                         stocksWithExchangeOpen.Add(sd.Security.Symbol.Value);
@@ -127,6 +133,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                         }
                     }
 
+                    // Mark as not consolidated if the initial consolidation did not occur
                     if (!sd.IsReady())
                     {
                         stocksNotConsolidated.Add(sd.Security.Symbol.Value);
@@ -289,7 +296,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                 algorithm.SubscriptionManager.AddConsolidator(security.Symbol, TBConsolidator);
 
                 //setup consolidator to manually check for readiness (new data) every morning 8 hours before market open for the symbol
-                algorithm.Schedule.On(algorithm.DateRules.EveryDay(), algorithm.TimeRules.AfterMarketOpen(Security.Symbol, -480, false), ScanUpdateConsolidator);
+                algorithm.Schedule.On(algorithm.DateRules.EveryDay(), algorithm.TimeRules.AfterMarketOpen(Security.Symbol, -120, false), ScanUpdateConsolidator);
 
                 ConsecutiveMissingData = 0;
                 ConsecutiveExchangeClosed = 0;
@@ -301,7 +308,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                     MOM != -9999999999m) ? true : false;
             }
 
-            private void ScanUpdateConsolidator()
+            public void ScanUpdateConsolidator()
             {
                 TBConsolidator.Scan(Algorithm.Time);
             }
