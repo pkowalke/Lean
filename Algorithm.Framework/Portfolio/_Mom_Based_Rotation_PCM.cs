@@ -18,6 +18,8 @@ using System.Collections.Generic;
 using System.Linq;
 using QuantConnect.Algorithm.Framework.Alphas;
 using QuantConnect.Data.UniverseSelection;
+using QuantConnect.Algorithm.Framework;
+using QuantConnect.Algorithm;
 
 namespace QuantConnect.Algorithm.Framework.Portfolio
 {
@@ -35,6 +37,7 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
         private readonly TimeSpan _rebalancingPeriod;
         private List<Symbol> _removedSymbols;        
         private DateTime? _nextExpiryTime;
+        private List<IPortfolioTarget> _currentTargets = new List<IPortfolioTarget>();
 
         /// <summary>
         /// Initialize a new instance of <see cref="EqualWeightingPortfolioConstructionModel"/>
@@ -53,6 +56,72 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
         /// <returns>An enumerable of portoflio targets to be sent to the execution model</returns>
         public override IEnumerable<IPortfolioTarget> CreateTargets(QCAlgorithmFramework algorithm, Insight[] insights)
         {
+            List<IPortfolioTarget> targets = new List<IPortfolioTarget>();
+
+            if (((_Mom_Based_Rotation_QCFA)(algorithm)).IsRebalancingNow)
+            {
+                List<Insight> topInsights;
+
+                bool QuantitiesOverZero = false;
+
+                for (int j = 0; !QuantitiesOverZero; j++)
+                {
+                    topInsights =
+                        (from i in insights
+                         where i.Magnitude > 0 &&
+                         i.Direction == InsightDirection.Up
+                         orderby i.Magnitude descending
+                         select i)
+                         .Take<Insight>(((_Mom_Based_Rotation_QCFA)(algorithm)).NumberOfTopMomentumStocks - j)
+                         .ToList<Insight>();
+
+                    if ((topInsights.Count) != (((_Mom_Based_Rotation_QCFA)(algorithm)).NumberOfTopMomentumStocks-j))
+                    {
+                        algorithm.Error(String.Format("Time: {0}. There are not enough insights with positive direction to create requested number of targets. Liquidating!!!",
+                            algorithm.Time.ToString()));
+
+                        return GetZeroTargetsForAllInvestedHoldings(algorithm);
+                    }
+
+                    foreach (Insight i in topInsights)
+                    {
+                        decimal OrderQuantity = Math.Floor((0.95m*algorithm.Portfolio.TotalPortfolioValue/topInsights.Count)/algorithm.Securities[i.Symbol.Value].Close).SmartRounding();
+
+                        if (OrderQuantity > 0)
+                        {
+                            targets.Add(new PortfolioTarget(i.Symbol, OrderQuantity));
+                        }
+                        else
+                        {
+                            algorithm.Error(String.Format("Time: {0}. The calculated qty for symbol: {1} would have been less than 1. I will try skipping lowest scoring symbol to free up buying power.",
+                            algorithm.Time.ToString(),
+                            i.Symbol.Value));
+                            targets.Clear();
+                            break;
+                        }
+                    }
+
+                    if (targets.Count == (((_Mom_Based_Rotation_QCFA)(algorithm)).NumberOfTopMomentumStocks - j))
+                    {
+                        if (targets.Count == 0)
+                        {
+                            algorithm.Error(String.Format("Time: {0}. Can't add even single share of top pick in the list.",
+                            algorithm.Time.ToString()));
+                        }
+
+                        algorithm.Debug(String.Format("Time: {0}. Adding {1} symbols to targets.",
+                            algorithm.Time.ToString(),
+                            targets.Count.ToString()));
+
+                        QuantitiesOverZero = true;
+                    }
+                }
+
+                //adjust targets which already exist
+                targets = AdjustExistingTargets(algorithm, targets.ToArray()).ToList();
+                targets = IncludeAlsoZeroTargetsForExcluded(algorithm, targets.ToArray()).ToList();
+                _currentTargets = targets;
+            }
             /*var targets = new List<IPortfolioTarget>();
 
             if (algorithm.UtcTime <= _nextExpiryTime &&
@@ -116,8 +185,55 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
 
             return targets;
             */
-            return new PortfolioTarget[] { };
+            return _currentTargets;
         }
+
+        public IEnumerable<IPortfolioTarget> GetZeroTargetsForAllInvestedHoldings(QCAlgorithmFramework algorithm)
+        {
+            List<IPortfolioTarget> targets = new List<IPortfolioTarget>();
+
+            foreach (Securities.Security s in algorithm.Portfolio.Securities.Values)
+            {
+                if (s.Invested)
+                {
+                    targets.Add(new PortfolioTarget(s.Symbol, 0));
+                }
+            }
+
+            return targets;
+        }
+
+        public IEnumerable<IPortfolioTarget> IncludeAlsoZeroTargetsForExcluded(QCAlgorithmFramework algorithm, IPortfolioTarget[] targets)
+        {
+            return
+                (from h in GetZeroTargetsForAllInvestedHoldings(algorithm)
+                 join t in targets
+                 on 1 equals 1
+                 where t.Symbol.Value != h.Symbol.Value
+                 select h)
+                 .Union(targets)
+                 .OrderBy(x => x.Quantity);
+        }
+
+        public IEnumerable<IPortfolioTarget> AdjustExistingTargets(QCAlgorithmFramework algorithm, IPortfolioTarget [] targets)
+        {
+            List<PortfolioTarget> newTargets = new List<PortfolioTarget>();
+
+            foreach (PortfolioTarget pt in targets)
+            {
+                if (algorithm.Securities[pt.Symbol.Value].Invested)
+                {
+                    newTargets.Add(new PortfolioTarget(pt.Symbol, algorithm.Securities[pt.Symbol.Value].Holdings.Quantity));
+                }
+                else
+                {
+                    newTargets.Add(new PortfolioTarget(pt.Symbol, pt.Quantity));
+                }
+            }
+
+            return newTargets;
+        }
+
 
         /// <summary>
         /// Event fired each time the we add/remove securities from the data feed

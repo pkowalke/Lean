@@ -134,6 +134,7 @@
     <Compile Include="Selection\UniverseSelectionModelPythonWrapper.cs" />
     <Compile Include="Selection\QC500UniverseSelectionModel.cs" />
     <Compile Include="Alphas\HistoricalReturnsAlphaModel.cs" />
+    <Compile Include="_Mom_Based_Rotation_QCFA.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Algorithm\QuantConnect.Algorithm.csproj">

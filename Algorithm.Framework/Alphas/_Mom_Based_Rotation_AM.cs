@@ -67,7 +67,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
             // if data is null than update was called by scheduler this it is emit time
             if (data == null)
             {
-                
+
                 List<String> stocksWithData = new List<string>();
                 List<String> stocksWithoutData = new List<string>();
                 List<String> stocksWithExchangeOpen = new List<string>();
@@ -158,7 +158,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                     {
                         // if all stocks had exchange closed or no data too many times, than return no insights
                         _previousInsights = new List<Insight>();
-                        return _previousInsights; 
+                        return _previousInsights;
                     }
 
                     // i f all stocks had exchange closed or no data but threshold was not met for all than return previous insights
@@ -187,22 +187,25 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                      on sd.Security.Symbol.Value equals inData
                      join openExch in stocksWithExchangeOpen
                      on sd.Security.Symbol.Value equals openExch
-                     where 
+                     where
                      !stocksNotConsolidated.Contains(sd.Security.Symbol.Value) &&
                      sd.IsReady() &&
                      sd.TBConsolidator.Consolidated.Price > 0
                      orderby sd.MOM descending
-                     select Insight.Price(sd.Security.Symbol, sd.Security.Exchange.Hours.GetNextMarketOpen(sd.Security.Exchange.Hours.GetNextMarketClose(algorithm.Time, false), false).Subtract(algorithm.Time), (sd.MOM>0)?InsightDirection.Up: (sd.MOM < 0)?InsightDirection.Down: InsightDirection.Flat, (double)(100*(sd.MOM/_momentumPeriod)), null))
+                     select Insight.Price(sd.Security.Symbol, sd.Security.Exchange.Hours.GetNextMarketOpen(sd.Security.Exchange.Hours.GetNextMarketClose(algorithm.Time, false), false).Subtract(algorithm.Time), (sd.MOM > 0) ? InsightDirection.Up : (sd.MOM < 0) ? InsightDirection.Down : InsightDirection.Flat, (double)(100 * (sd.MOM / _momentumPeriod)), null))
                     .ToList();
 
                 _previousInsights = new List<Insight>();
                 _previousInsights.AddRange(insightsToBeCarriedOver);
                 _previousInsights.AddRange(insightsNew);
 
-                if (_previousInsights.Count() != _symbolDataBySymbol.Count) algorithm.Error(String.Format("Time: {0}. Returning {1} insights for {2} symbols.",
+                if (_previousInsights.Count() != _symbolDataBySymbol.Count)
+                {
+                    algorithm.Error(String.Format("Time: {0}. Returning {1} insights for {2} symbols.",
                         algorithm.Time.ToString(),
                         _previousInsights.Count.ToString(),
                         _symbolDataBySymbol.Count.ToString()));
+                }                
 
                 return _previousInsights;
             }
