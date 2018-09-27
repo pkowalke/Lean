@@ -24,6 +24,7 @@ using QuantConnect.Algorithm.Framework.Execution;
 using QuantConnect.Algorithm.Framework.Portfolio;
 using QuantConnect.Algorithm.Framework.Risk;
 using QuantConnect.Algorithm.Framework.Selection;
+using QuantConnect.Orders;
 using QuantConnect.Data;
 using QuantConnect.Data.Fundamental;
 using QuantConnect.Data.UniverseSelection;
@@ -41,66 +42,61 @@ namespace QuantConnect.Algorithm.Framework
     public partial class _Mom_Based_Rotation_QCFA : QCAlgorithmFramework
     {
         private readonly DateTime _startDate = new DateTime(2018, 01, 01);
-        private readonly DateTime _endDate = new DateTime(2018, 09, 18);
+        private readonly DateTime _endDate = new DateTime(2018, 09, 19);
         private readonly Resolution _resolution = Resolution.Minute;
 
-        private readonly Decimal _backtestCash = 10000m;
+        private readonly Decimal _backtestCash = 50000m;
 
         private readonly IReadOnlyList<String> _symbolStrs = new List<String>
         {
             "AMZN",  //"Amazon.com"
-			"NFLX",  //"Netflix"
+            "AAPL",  //"Apple"
+            "BA",  //"Boeing"
+            "BABA",  //"Alibaba"
+            "BAC",  //"Bank of America"
+            //"BRKb",  //"Berkshire Hathaway B"
+            "C",  //"Citigroup"
+            "CMCSA",  //"Comcast"
+            "CSCO",  //"Cisco"
+            "CVX",  //"Chevron"
+            "DIS",  //"Walt Disney"
+            "FB",  //"Facebook"
+            "GOOGL",  //"Alphabet A"
+            "HD",  //"Home Depot"
+            "INTC",  //"Intel"
+            "IVV", //Shares of SP500
+            "JNJ",  //"J&J"
+            "JPM",  //"JPMorgan"
+            "MSFT",  //"Microsoft"
+            "NFLX",  //"Netflix"
             "NVDA",  //"NVIDIA"
-			"MSFT",  //"Microsoft"
-			"BA",  //"Boeing"
-			"CSCO",  //"Cisco"
-			"AAPL",  //"Apple"
-			"V",  //"Visa"
-			"HD",  //"Home Depot"
-			"UNH",  //"UnitedHealth"
-			"BAC",  //"Bank of America"
-			"JPM",  //"JPMorgan"
-			"GOOGL",  //"Alphabet A"
-			"INTC",  //"Intel"
-			"PFE",  //"Pfizer"
-			"WMT",  //"Walmart"
-			//"BRKb",  //"Berkshire Hathaway B"
-			"VZ",  //"Verizon"
-			"DIS",  //"Walt Disney"
-			"WFC",  //"Wells Fargo&Co"
-			"JNJ",  //"J&J"
-			"XOM",  //"Exxon Mobil"
-			"CVX",  //"Chevron"
-			"C",  //"Citigroup"
-			"CMCSA",  //"Comcast"
-			"FB",  //"Facebook"
-			"ORCL",  //"Oracle"
-			"T",  //"AT&T"
-			"BABA",  //"Alibaba"
-			"TSLA",  //"Tesla"
-            //"UNP", //Union Pacific Corp
-			"IVV" //Shares of SP500
+            "ORCL",  //"Oracle"
+            "PFE",  //"Pfizer"
+            "T",  //"AT&T"
+            "TSLA",  //"Tesla"
+            "UNH",  //"UnitedHealth"
+            "UNP", //Union Pacific Corp
+            "V",  //"Visa"
+            "VZ",  //"Verizon"
+            "WFC",  //"Wells Fargo&Co"
+            "WMT",  //"Walmart"
+            "XOM"  //"Exxon Mobil"
         };
 
-        private readonly int _momentumPeriod = 6 * 21;
+        private readonly int _momentumPeriod = 60;
         private readonly Resolution _momentumResolution = Resolution.Daily;
-        private readonly int _numberOfTopStocks = 1;
-
-        //emit insights at this specific times in order to avoid flood of insights
-        private readonly int _emitHour = 8;
-        private readonly int _emitMinute = 30;
-        private readonly DayOfWeek [] _emitDaysOfWeek = new DayOfWeek [] { DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
-        private Scheduling.ITimeRule _emitTime;
-        private Scheduling.IDateRule _emitDate;
+        private readonly int _numberOfTopStocks = 3;
 
         //actual rebalance of the portfolio or placement of orders based portfolio targets should happen at these times
         private readonly int _rebalanceHour = 8;
         private readonly int _rebalanceMinute = 30;
-        private readonly DayOfWeek[] _rebalanceDaysOfWeek = new DayOfWeek[] { DayOfWeek.Monday };
-        private Scheduling.ITimeRule _rebalanceTime;
-        private Scheduling.IDateRule _rebalanceDate;
+        private readonly DayOfWeek[] _rebalanceDaysOfWeek = new DayOfWeek[] { DayOfWeek.Wednesday };
+        public Scheduling.ITimeRule _rebalanceTime;
+        public Scheduling.IDateRule _rebalanceDate;
 
         private bool _isRebalancingNow = false;
+
+        private Slice _lastNonEmptySlice;
 
         public override void Initialize()
         {
@@ -111,40 +107,29 @@ namespace QuantConnect.Algorithm.Framework
             SetCash(_backtestCash);
             SetTimeZone(TimeZones.NewYork);
 
-            _emitTime = TimeRules.At(_emitHour, _emitMinute);
-            _emitDate = DateRules.Every(_emitDaysOfWeek);
-
-            _rebalanceTime = TimeRules.At(_emitHour, _rebalanceMinute);
-            _rebalanceDate = DateRules.Every(_rebalanceDaysOfWeek);
+            _lastNonEmptySlice = new Slice(Time, new List<BaseData>());
 
             UniverseSettings.Resolution = _resolution;
             UniverseSettings.ExtendedMarketHours = false;
             UniverseSettings.FillForward = true;
 
+            _rebalanceTime = TimeRules.At(_rebalanceHour, _rebalanceMinute, TimeZone);
+            _rebalanceDate = DateRules.Every(_rebalanceDaysOfWeek);
+
+            _Mom_Based_Rotation_PCM.PortfolioConstructionAlphaModelData _Mom_Based_Rotation_PCAMD = new _Mom_Based_Rotation_PCM.PortfolioConstructionAlphaModelData(
+                "_Mom_Based_Rotation_AM",
+                10000,
+                _numberOfTopStocks,
+                _rebalanceDate,
+                _rebalanceTime);
+
             SetUniverseSelection(new _Mom_Based_Rotation_SM(_symbolStrs.Select(s => QuantConnect.Symbol.Create(s, SecurityType.Equity, Market.USA)), this.UniverseSettings, this.SecurityInitializer));
             SetAlpha(new _Mom_Based_Rotation_AM(_momentumPeriod, _momentumResolution, _resolution));
             //SetRiskManagement(new _Mom_Based_Rotation_RM(0.5m));
-            SetPortfolioConstruction(new _Mom_Based_Rotation_PCM());
+            SetPortfolioConstruction(new _Mom_Based_Rotation_PCM(this, _Mom_Based_Rotation_PCAMD));
             SetExecution(new _Mom_Based_Rotation_EM());
 
-            Schedule.On(_emitDate, _emitTime, EmitInsights);
-            Schedule.On(_rebalanceDate, _rebalanceTime, CreateTargets);
-
-
-        }
-
-        public void EmitInsights()
-        {
-            //if market is open today for at least single security send insights
-            if ((from s in Portfolio.Securities.Values
-                 where s.Exchange.DateIsOpen(Time.Date)
-                 select s)
-                 .Count() >= 1)
-            {
-                Execution.Execute(this,
-                    PortfolioConstruction.CreateTargets(this,
-                    Alpha.Update(this, null).ToArray<Insight>()).ToArray<IPortfolioTarget>());
-            }
+            Schedule.On(_rebalanceDate, _rebalanceTime, CreateTargets); 
         }
 
         public void CreateTargets()
@@ -157,12 +142,12 @@ namespace QuantConnect.Algorithm.Framework
             {
                 Semaphore s = new Semaphore(1, 1);
                 s.WaitOne();
-                Thread.Sleep(5000); //sleep 5 secs in case to let processes clear out of the model
-                IsRebalancingNow = true;
-                Execution.Execute(this,
-                    PortfolioConstruction.CreateTargets(this,
-                    Alpha.Update(this, null).ToArray<Insight>()).ToArray<IPortfolioTarget>());
-                IsRebalancingNow = false;
+                Thread.Sleep(1000); //sleep 1 secs in case to let processes clear out of the model
+                _isRebalancingNow = true;
+
+                OnFrameworkData(_lastNonEmptySlice);
+                
+                _isRebalancingNow = false;
                 s.Release();
                 s.Dispose();
             }
@@ -170,7 +155,7 @@ namespace QuantConnect.Algorithm.Framework
 
         public override void OnData(Slice data)
         {
-            ;
+            if (data.HasData) _lastNonEmptySlice = data;
         }
 
         public void OnData(Dividends slice)
@@ -193,15 +178,11 @@ namespace QuantConnect.Algorithm.Framework
             ;
         }
 
-        public bool IsRebalancingNow
+        // Override the base class event handler for order events
+        public override void OnOrderEvent(OrderEvent orderEvent)
         {
-            get { return _isRebalancingNow; }
-            set { _isRebalancingNow = value; }
-        }
-
-        public Int32 NumberOfTopMomentumStocks
-        {
-            get { return _numberOfTopStocks; }
+            //update PCM with order statuses
+            ((_Mom_Based_Rotation_PCM)(PortfolioConstruction)).AddOrderEvent(this, orderEvent);
         }
 
         public bool CanRunLocally { get; } = true;

@@ -64,10 +64,11 @@ namespace QuantConnect.Algorithm.Framework.Alphas
         /// <returns>The new insights generated</returns>
         public override IEnumerable<Insight> Update(QCAlgorithmFramework algorithm, Slice data)
         {
-            // if data is null than update was called by scheduler this it is emit time
-            if (data == null)
+            // update was called by scheduler at is rebalance time
+            if (((_Mom_Based_Rotation_QCFA)(algorithm))._rebalanceDate.GetDates(algorithm.Time.Date, algorithm.Time.Date).Count() == 1 &&
+                    ((_Mom_Based_Rotation_QCFA)(algorithm))._rebalanceTime.CreateUtcEventTimes( new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(h => h.Hour).Contains(algorithm.Time.Hour) &&
+                    ((_Mom_Based_Rotation_QCFA)(algorithm))._rebalanceTime.CreateUtcEventTimes( new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(m => m.Minute).Contains(algorithm.Time.Minute))
             {
-
                 List<String> stocksWithData = new List<string>();
                 List<String> stocksWithoutData = new List<string>();
                 List<String> stocksWithExchangeOpen = new List<string>();
@@ -192,7 +193,13 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                      sd.IsReady() &&
                      sd.TBConsolidator.Consolidated.Price > 0
                      orderby sd.MOM descending
-                     select Insight.Price(sd.Security.Symbol, sd.Security.Exchange.Hours.GetNextMarketOpen(sd.Security.Exchange.Hours.GetNextMarketClose(algorithm.Time, false), false).Subtract(algorithm.Time), (sd.MOM > 0) ? InsightDirection.Up : (sd.MOM < 0) ? InsightDirection.Down : InsightDirection.Flat, (double)(100 * (sd.MOM / _momentumPeriod)), null))
+                     select Insight.Price(
+                         sd.Security.Symbol,
+                         new DateTime(algorithm.Time.Year, algorithm.Time.Month, algorithm.Time.Day, 23, 59, 59, 999),
+                         (sd.MOM > 0) ? InsightDirection.Up : (sd.MOM < 0) ? InsightDirection.Down : InsightDirection.Flat,
+                         (double)(100 * (sd.MOM / _momentumPeriod)),
+                         null,
+                         "_Mom_Based_Rotation_AM"))
                     .ToList();
 
                 _previousInsights = new List<Insight>();
