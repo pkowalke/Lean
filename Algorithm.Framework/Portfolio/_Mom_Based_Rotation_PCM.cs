@@ -68,10 +68,19 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
 
             foreach (PortfolioConstructionAlphaModelData pcamd in _alphaModels)
             {
+                algorithm.Debug(String.Format("Time: {0}. Model: {1}, current cash: {2}, current holdings: {3}.",
+                            algorithm.Time.ToString(),
+                            pcamd.Name.ToString(),
+                            pcamd.CurrentAlphaModelCash.ToString(),
+                            pcamd.GetCurrentAlphaModelHoldingsValue(algorithm).ToString()));
+
                 pcamd.UpdateActiveInsights(insights);
                 pcamd.PruneExpiredInsightsForWhichExchangeWasOpen(algorithm);
                 pcamd.UpdateNewTargets(algorithm);
                 pcamd.UpdateNewTargetsWithFlatTargets(algorithm);
+
+                algorithm.Debug(String.Format("Time: {0}. New Targets are ready.",
+                            algorithm.Time.ToString()));
 
                 if (pcamd.RebalancingDate.GetDates(algorithm.Time.Date, algorithm.Time.Date).Count() == 1 &&
                     pcamd.RebalancingTime.CreateUtcEventTimes(new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(h => h.Hour).Contains(algorithm.Time.Hour) &&
@@ -152,55 +161,6 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
             //return _currentTargets;
         }
 
-        /// remove
-        /*public IEnumerable<IPortfolioTarget> GetZeroTargetsForAllInvestedHoldings(QCAlgorithmFramework algorithm)
-        {
-            List<IPortfolioTarget> targets = new List<IPortfolioTarget>();
-
-            foreach (Securities.Security s in algorithm.Portfolio.Securities.Values)
-            {
-                if (s.Invested)
-                {
-                    targets.Add(new PortfolioTarget(s.Symbol, 0));
-                }
-            }
-
-            return targets;
-        }*/
-
-        /// remove
-        /*public IEnumerable<IPortfolioTarget> IncludeAlsoZeroTargetsForExcluded(QCAlgorithmFramework algorithm, IPortfolioTarget[] targets)
-        {
-            return
-                (from h in GetZeroTargetsForAllInvestedHoldings(algorithm)
-                 join t in targets
-                 on 1 equals 1
-                 where t.Symbol.Value != h.Symbol.Value
-                 select h)
-                 .Union(targets)
-                 .OrderBy(x => x.Quantity);
-        }*/
-
-        /// remove
-        /*public IEnumerable<IPortfolioTarget> AdjustExistingTargets(QCAlgorithmFramework algorithm, IPortfolioTarget [] targets)
-        {
-            List<PortfolioTarget> newTargets = new List<PortfolioTarget>();
-
-            foreach (PortfolioTarget pt in targets)
-            {
-                if (algorithm.Securities[pt.Symbol.Value].Invested)
-                {
-                    newTargets.Add(new PortfolioTarget(pt.Symbol, algorithm.Securities[pt.Symbol.Value].Holdings.Quantity));
-                }
-                else
-                {
-                    newTargets.Add(new PortfolioTarget(pt.Symbol, pt.Quantity));
-                }
-            }
-
-            return newTargets;
-        }*/
-
         /// <summary>
         /// public function that can be called from event handler in order to update event data for all Alpha Models
         /// handled by this Portfolio Construction Model
@@ -211,10 +171,50 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
         {
             foreach (PortfolioConstructionAlphaModelData pcamd in _alphaModels)
             {
+                //if the orderEvent symbol is a symbol associated with the current
+                //alpha model then proceed
+
+                ; //do check this.name.Mom_Based_Alpha
+
+                Orders.OrderTicket ot = algorithm.Transactions.GetOrderTicket(orderEvent.OrderId);
+
+                Orders.OrderEvent [] oes = ot.OrderEvents.OrderByDescending(x => x.UtcTime).ToArray();
+
+                Orders.OrderEvent[] previousPartialFills = new Orders.OrderEvent[] { };
+
+                for (int i =0; i <  oes.Count(); i++)
+                {
+                    if (oes[i].Status == Orders.OrderStatus.PartiallyFilled &&
+                        oes[i] != orderEvent &&
+                        oes[i].UtcTime < orderEvent.UtcTime)
+                    {
+                        previousPartialFills = previousPartialFills.Union(new Orders.OrderEvent[1] { oes[i] }).OrderByDescending(x => x.UtcTime).ToArray();
+                    }
+                }
+
+                //if partial fill, add previous partial fills, retract them and apply the current partial fill
+                //don't add fee yet
+                if (orderEvent.Status == Orders.OrderStatus.PartiallyFilled)
+                {
+                    ; // do
+                }
+
+                //if canceled, just apply order fee
+                if (orderEvent.Status == Orders.OrderStatus.Canceled)
+                {
+                    ; // do
+                }
+
+                //if filled, add previous partial fills, retract them and apply total order value with fee
+                if (orderEvent.Status == Orders.OrderStatus.Filled)
+                {
+                    ; // do
+                }
+
                 //currently it is assumed that if the order contained symbol and quantity equal to target
                 //than it is a match. In the future the PortfolioTarget class can be overloaded in order
                 //to add tracking information that can be used in Execution Model and passed back for identification.
-                PortfolioConstructionAlphaModelData.PortfolioTargetTracking orderTarget =
+                /*PortfolioConstructionAlphaModelData.PortfolioTargetTracking orderTarget =
                     (from ptt in pcamd.ActiveTargets
                      where ptt.Target.Symbol.Value == algorithm.Transactions.GetOrderById(orderEvent.OrderId).Symbol.Value &&
                      ptt.OrderQuantity == algorithm.Transactions.GetOrderById(orderEvent.OrderId).Quantity
@@ -227,7 +227,7 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
                     orderEvent.Status == Orders.OrderStatus.Canceled)
                 {
                     pcamd.UpdateCash(-1 * algorithm.Transactions.GetOrderById(orderEvent.OrderId).Value + -1 * orderEvent.OrderFee);
-                }
+                }*/
             }
         }
 
@@ -238,7 +238,7 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
         /// <param name="changes">The security additions and removals from the algorithm</param>
         public override void OnSecuritiesChanged(QCAlgorithmFramework algorithm, SecurityChanges changes)
         {
-            // Get removed symbol and invalidate them in the insight collection
+            // Get removed symbol and invalidate them in the insight collection and remove active targets with them
             _removedSymbols = changes.RemovedSecurities.Select(x => x.Symbol).ToList();
 
             foreach (PortfolioConstructionAlphaModelData pcamd in _alphaModels)
@@ -252,11 +252,11 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
         {
             private readonly String _alphaName = "";
 
-            private readonly Int32 _startingCash = 10000;
+            private readonly Int32 _startingCash = 0;
 
-            private Decimal _currentCash = 10000;
+            private Decimal _currentCash = 0;
 
-            private readonly Int32 _numberOfTopStocks = 5;
+            private readonly Int32 _numberOfTopStocks = 0;
 
             private readonly Scheduling.IDateRule _rebalancingDate;
 
@@ -272,6 +272,7 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
             {
                 _alphaName = alphaName;
                 _startingCash = startingCash;
+                _currentCash = _startingCash;
                 _numberOfTopStocks = numberOfTopStocks;
                 _rebalancingDate = rebalancingDate;
                 _rebalancingTime = rebalancingTime;
@@ -299,23 +300,28 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
                 get { return _rebalancingTime; }
             }
 
-            public Decimal CurrentAlphaModelCash
+            /*public Decimal CurrentAlphaModelCash
             {
                 get { return _currentCash; }
                 set { _currentCash = value; }
-            }
+            }*/
 
-            public Decimal GetCurrentAlphaModelHoldingsValue(QCAlgorithmFramework algorithm)
+            /*public Decimal GetCurrentAlphaModelCostOfHoldings(QCAlgorithmFramework algorithm)
             {
-                return _activeTargets.Sum(x => x.GetCurrentValueOfHoldingInPortfolio(algorithm));
-            }
+                return _activeTargets.Sum(x => (x.Target.Quantity != 0) ? x.TotalCost : 0m);
+            }*/
+
+            /*public Decimal GetCurrentAlphaModelHoldingsValue(QCAlgorithmFramework algorithm)
+            {
+                return _activeTargets.Sum(x => (x.Target.Quantity != 0) ? x.GetCurrentValueOfHoldingInPortfolio(algorithm) : 0m);
+            }*/
 
             public void UpdateActiveInsights(IEnumerable<Insight> incomingInsights)
             {
                 //add insights for symbols which are not yet in active insights
                 //replace insights for symbols for which new insights are available
 
-                _activeInsights.RemoveAll(x => incomingInsights.Contains(x));
+                _activeInsights.RemoveAll(x => incomingInsights.Select(s => s.Symbol.Value).Contains(x.Symbol.Value));
                 _activeInsights.AddRange(incomingInsights);
             }
 
@@ -349,12 +355,16 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
 
             public void UpdateNewTargets(QCAlgorithmFramework algorithm)
             {
-                _newTargets.Clear();
+                _newTargets = new List<PortfolioTargetTracking>();
 
                 bool QuantitiesOverZero = false;
 
                 for (int j = 0; !QuantitiesOverZero; j++)
                 {
+                    algorithm.Debug(String.Format("Time: {0}. Attempting to create list of new targets with count: {1}.",
+                            algorithm.Time.ToString(),
+                            (_numberOfTopStocks - j).ToString()));
+
                     _newTargets =
                     (from ai in _activeInsights
                      where ai.Magnitude > 0 &&
@@ -366,23 +376,26 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
 
                     if ((_newTargets.Count) != _numberOfTopStocks - j)
                     {
-                        algorithm.Error(String.Format("Time: {0}. There are not enough insights with positive direction to create requested number of targets. I am skipping changing targets this time!!!",
+                        algorithm.Error(String.Format("Time: {0}. There are not enough insights with positive direction to create requested number of targets. Emptying the list of new targets!!!",
                             algorithm.Time.ToString()));
 
-                        _newTargets.Clear();
+                        _newTargets = new List<PortfolioTargetTracking>();
                     }
 
+                    List<PortfolioTargetTracking> newTargetsWithQuantityLessThanOne = _newTargets.Where(x => x.Target.Quantity < 1m).Select(y => y).ToList();
 
-                    if (_newTargets.Where(x => x.Target.Quantity < 1m).Select(x => x.Target.Quantity).Count() > 0)
+                    if (newTargetsWithQuantityLessThanOne.Count > 0)
                     {
-                        foreach (PortfolioTargetTracking ptt in _newTargets)
-                        {
-                            algorithm.Error(String.Format("Time: {0}. The calculated qty for symbol: {1} would have been less than 1. I will try skipping lowest scoring symbol to free up buying power.",
+                        algorithm.Error(String.Format("Time: {0}. {1} of symbols added to new targets had quantity less than 1. Try with less targets?",
                             algorithm.Time.ToString(),
-                            ptt.Target.Symbol.Value));
-                        }
+                            newTargetsWithQuantityLessThanOne.Count.ToString()));
 
-                        _newTargets.Clear();
+                        algorithm.Debug(String.Format("Time: {0}. Current cash: {1}, current holdings: {2}.",
+                            algorithm.Time.ToString(),
+                            _currentCash.ToString(),
+                            GetCurrentAlphaModelHoldingsValue(algorithm).ToString()));
+
+                        _newTargets = new List<PortfolioTargetTracking>();
 
                         break;
                     }
@@ -399,6 +412,11 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
                             algorithm.Time.ToString(),
                             _newTargets.Count.ToString()));
 
+                        algorithm.Debug(String.Format("Time: {0}. Current cash: {1}, current holdings: {2}.",
+                            algorithm.Time.ToString(),
+                            _currentCash.ToString(),
+                            GetCurrentAlphaModelHoldingsValue(algorithm).ToString()));
+
                         QuantitiesOverZero = true;
                     }
                 }
@@ -407,9 +425,11 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
             public void UpdateNewTargetsWithFlatTargets(QCAlgorithmFramework algorithm)
             {
                 //check for securities which have active targets, but do not have new targets
-                //add these securities with targets of 0 to new targets
+                //add these securities with targets of 0 to new targets unless there is existing
+                //target of 0 in active targets
                 _newTargets.AddRange(from at in _activeTargets
-                                     where !_newTargets.Select(x => x.Target.Symbol.Value).Contains(at.Target.Symbol.Value)
+                                     where !_newTargets.Select(x => x.Target.Symbol.Value).Contains(at.Target.Symbol.Value) &&
+                                     at.Target.Quantity != 0
                                      select (new PortfolioTargetTracking(algorithm, at.Target.Symbol, 0)));
             }
 
@@ -423,7 +443,21 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
 
             public void UpdateActiveTargetsWithNewTargets()
             {
-                _activeTargets = _newTargets;
+                //if active quantity of active and new target is the same then select the active target, but
+                //if quantity is different than select the new target
+                _activeTargets =
+                    (from nt in _newTargets
+                     join at in _activeTargets on nt.Target.Symbol.Value equals at.Target.Symbol.Value into ant
+                     from at in ant.DefaultIfEmpty()
+                     select (at != null && at.Target.Quantity == nt.Target.Quantity) ? at : nt)
+                     .ToList<PortfolioTargetTracking>();
+            }
+
+            public Int32 GetOrderQuantityForPortfolioTarget(QCAlgorithmFramework algorithm, PortfolioTarget target)
+            {
+                return (target.Quantity > 0 || target.Quantity < 0) ?
+                        Convert.ToInt32(target.Quantity - algorithm.Securities[target.Symbol.Value].Holdings.Quantity) :
+                        Convert.ToInt32(-1 * algorithm.Securities[target.Symbol.Value].Holdings.Quantity);
             }
 
             public class PortfolioTargetTracking
@@ -431,19 +465,11 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
                 private PortfolioTarget _target;
                 private bool _isSubmitted;
                 private List<Orders.OrderEvent> _orderEvents = new List<Orders.OrderEvent>();
-                private Decimal _totalCost = -9999999999m;
+                //private Decimal _totalCost = -9999999999m;
                 private Decimal _orderQuantity = 0;
 
                 public PortfolioTargetTracking(QCAlgorithmFramework algorithm, Symbol symbol, Decimal quantity)
-                {
-                    _target = new PortfolioTarget(symbol, quantity);
-
-                    _isSubmitted = false;
-
-                    _orderQuantity = (quantity > 0 || quantity < 0) ?
-                        quantity - algorithm.Securities[symbol.Value].Holdings.Quantity :
-                        -1m * algorithm.Securities[symbol.Value].Holdings.Quantity;
-                }
+                    : this(algorithm, symbol, quantity, false) {}
 
                 public PortfolioTargetTracking(QCAlgorithmFramework algorithm, Symbol symbol, Decimal quantity, bool isSubmitted)
                 {
@@ -458,15 +484,17 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
 
                 public bool IsSubmitted { get { return _isSubmitted; } set { _isSubmitted = value; } }
 
-                public Decimal GetCurrentValueOfHoldingInPortfolio(QCAlgorithmFramework algorithm)
+                /*public Decimal GetCurrentValueOfHoldingInPortfolio(QCAlgorithmFramework algorithm)
                 {
+                    Orders.Order o = (IsOrderEventAvailable()) ? algorithm.Transactions.GetOrderById(GetLastOrderEvent().OrderId) : null;
+
                     return
-                         GetLastOrderEvent().AbsoluteFillQuantity * algorithm.Securities[_target.Symbol].Price;
-                }
+                            (IsOrderEventAvailable())?o.GetValue(algorithm.Securities[_target.Symbol]):0m;
+                }*/
 
                 public PortfolioTarget Target { get { return _target; } }
 
-                public Decimal TotalCost
+                /*public Decimal TotalCost
                 {
                     get
                     {
@@ -474,9 +502,9 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
                           _totalCost :
                           0;
                     }
-                }
+                }*/
 
-                public void AddOrderEvent(QCAlgorithmFramework algorithm, Orders.OrderEvent orderEvent)
+                /*public void AddOrderEvent(QCAlgorithmFramework algorithm, Orders.OrderEvent orderEvent)
                 {
                     _orderEvents.Add(orderEvent);
 
@@ -492,30 +520,23 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
                             orderEvent.FillPrice * orderEvent.FillQuantity +
                             orderEvent.OrderFee;
                     }
-                }
+                }*/
 
-                public Orders.OrderEvent GetLastOrderEvent()
+                /*public Orders.OrderEvent GetLastOrderEvent()
                 {
-                    //return order event with with status = none in case there are no orders
-                    Orders.OrderEvent emptyOrderEvent = new Orders.OrderEvent(
-                        -1,
-                        "n/a",
-                        new DateTime(),
-                        Orders.OrderStatus.None,
-                        Orders.OrderDirection.Hold,
-                        0,
-                        0,
-                        0);
-
-                    return (_orderEvents.Count > 0) ?
+                    return 
                         (from oe in _orderEvents
                          orderby oe.UtcTime descending
                          select oe)
                          .Take<Orders.OrderEvent>(1)
-                         .Single<Orders.OrderEvent>()
-                         :
-                         emptyOrderEvent;
-                }
+                         .Single<Orders.OrderEvent>();
+                }*/
+
+                /*public bool IsOrderEventAvailable()
+                {
+                    return
+                        (_orderEvents.Count > 0) ? true : false;
+                }*/
 
                 public Decimal OrderQuantity
                 {

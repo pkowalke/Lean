@@ -15,15 +15,104 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections;
 using System.Linq;
+using QuantConnect.Data;
+using QuantConnect.Data.Market;
 using QuantConnect.Data.Fundamental;
 using QuantConnect.Data.UniverseSelection;
 using QuantConnect.Securities;
 
 namespace QuantConnect.Algorithm.Framework.Selection
 {
-    public class _Mom_Based_Rotation_SM : ManualUniverseSelectionModel
+    public class _Mom_Based_Rotation_SM : UniverseSelectionModel
     {
-        public _Mom_Based_Rotation_SM(IEnumerable<Symbol> symbols, UniverseSettings universeSettings, ISecurityInitializer initializer) : base(symbols, universeSettings, initializer) { }
+        private static readonly MarketHoursDatabase MarketHours = MarketHoursDatabase.FromDataFolder();
+
+        private readonly IDictionary<String, List<Symbol>> _symbols; // dictionary of alpha model name and symbol kvps
+        private readonly UniverseSettings _universeSettings;
+        private readonly ISecurityInitializer _securityInitializer;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="_Mom_Based_Rotation_SM"/> class using the algorithm's
+        /// security initializer and universe settings
+        /// </summary>
+        /// <param name="symbols">The symbols to subscribe to</param>
+        public _Mom_Based_Rotation_SM(IDictionary<String, List<Symbol>> symbols)
+            : this(symbols, null, null)
+        {
+        }
+
+         /// <summary>
+        /// Initializes a new instance of the <see cref="_Mom_Based_Rotation_SM"/> class
+        /// </summary>
+        /// <param name="symbols">The symbols to subscribe to</param>
+        /// <param name="universeSettings">The settings used when adding symbols to the algorithm, specify null to use algorthm.UniverseSettings</param>
+        /// <param name="securityInitializer">Optional security initializer invoked when creating new securities, specify null to use algorithm.SecurityInitializer</param>
+        public _Mom_Based_Rotation_SM(IDictionary<String, List<Symbol>> symbols, UniverseSettings universeSettings, ISecurityInitializer securityInitializer)
+        {
+            _symbols = symbols;
+
+            if (_symbols == null)
+            {
+                throw new ArgumentNullException(nameof(_symbols));
+            }
+
+            _universeSettings = universeSettings;
+            _securityInitializer = securityInitializer;
+
+            foreach (List<Symbol> ls in _symbols.Values)
+            {
+                ls.RemoveAll(s => s.IsCanonical());
+
+                foreach (Symbol s in ls)
+                {
+                    SymbolCache.Set(s.Value, s);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Creates the universes for this algorithm.
+        /// Called at algorithm start.
+        /// </summary>
+        /// <returns>The universes defined by this model</returns>
+        public override IEnumerable<Universe> CreateUniverses(QCAlgorithmFramework algorithm)
+        {
+            var universeSettings = _universeSettings ?? algorithm.UniverseSettings;
+            var securityInitializer = _securityInitializer ?? algorithm.SecurityInitializer;
+
+            var resolution = universeSettings.Resolution;
+            var type = resolution == Resolution.Tick ? typeof(Tick) : typeof(TradeBar);
+
+            // universe per alpha model/security type/market
+            foreach (KeyValuePair<String, List<Symbol>> alphaModelSymbols in _symbols)
+            {
+                foreach (var grp in alphaModelSymbols.Value.GroupBy(s => new { s.ID.Market, s.SecurityType }))
+                {
+                    MarketHoursDatabase.Entry entry;
+
+                    var market = grp.Key.Market;
+                    var securityType = grp.Key.SecurityType;
+                    var universeSymbol = Symbol.Create($"_Mom_Based_Rotation_SM-{alphaModelSymbols.Key}-{securityType}-{market}", securityType, market);
+                    if (securityType == SecurityType.Base)
+                    {
+                        // add an entry for this custom universe symbol -- we don't really know the time zone for sure,
+                        // but we set it to TimeZones.NewYork in AddData, also, since this is a manual universe, the time
+                        // zone doesn't actually matter since this universe specifically doesn't do anything with data.
+                        var symbolString = MarketHoursDatabase.GetDatabaseSymbolKey(universeSymbol);
+                        var alwaysOpen = SecurityExchangeHours.AlwaysOpen(TimeZones.NewYork);
+                        entry = MarketHours.SetEntry(market, symbolString, securityType, alwaysOpen, TimeZones.NewYork);
+                    }
+                    else
+                    {
+                        entry = MarketHours.GetEntry(market, (string)null, securityType);
+                    }
+
+                    var config = new SubscriptionDataConfig(type, universeSymbol, resolution, entry.DataTimeZone, entry.ExchangeHours.TimeZone, false, false, true);
+                    yield return new ManualUniverse(config, universeSettings, securityInitializer, grp);
+                }
+            }
+        }
     }
 }

@@ -89,6 +89,7 @@ namespace QuantConnect.Algorithm.CSharp
 
             foreach (String s in _symbolStrs)
             {
+                
                 AddEquity(s, _resolution, Market.USA, fillDataForward: true, leverage: 0, extendedMarketHours: false);
                 _momentum.Add(s, MOM(Symbol(s), _momentumPeriod, _resolution));
 
