@@ -45,7 +45,7 @@ namespace QuantConnect.Algorithm.Framework
         private readonly DateTime _endDate = new DateTime(2018, 09, 19);
         private readonly Resolution _resolution = Resolution.Minute;
 
-        private readonly Decimal _backtestCash = 50000m;
+        private readonly Decimal _backtestCash = 10000;
 
         /*private readonly IReadOnlyList<String> _symbolStrs = new List<String>
         {
@@ -131,7 +131,7 @@ namespace QuantConnect.Algorithm.Framework
             }
         };
 
-        private readonly IDictionary<String, String> _alphaUniverse = new Dictionary<string, string>()
+        public readonly IDictionary<String, String> AlphaUniverse = new Dictionary<string, string>()
         {
             { "Mom_Based_Alpha", "_MOM_BASED_ROTATION_SM-MOM_BASED_ALPHA_UNIVERSE-EQUITY-USA 2T" }
         };
@@ -174,17 +174,10 @@ namespace QuantConnect.Algorithm.Framework
             _rebalanceDate = DateRules.Every(_rebalanceDaysOfWeek);
 
             UniverseSelection = new _Mom_Based_Rotation_SM(_symbols, this.UniverseSettings, this.SecurityInitializer);
-            AlphaModel = new _Mom_Based_Rotation_AM(_alphaUniverse);
-            AlphaModel.InitMomBasedInsights(_momentumPeriod, _momentumResolution, _resolution, _rebalanceDate, _rebalanceTime);
-            PortfolioConstruction =
-                new _Mom_Based_Rotation_PCM(this,
-                new _Mom_Based_Rotation_PCM.PortfolioConstructionAlphaModelData(
-                    "Mom_Based_Alpha",
-                    10000,
-                    _numberOfTopStocks,
-                    _rebalanceDate,
-                    _rebalanceTime)
-                    );
+            AlphaModel = new _Mom_Based_Rotation_AM(AlphaUniverse);
+            AlphaModel.InitMomBasedInsights("Mom_Based_Alpha", _momentumPeriod, _momentumResolution, _resolution, _rebalanceDate, _rebalanceTime);
+            PortfolioConstruction = new _Mom_Based_Rotation_PCM(AlphaUniverse);
+            PortfolioConstruction.InitMomBasedPortfolioConstruction("Mom_Based_Alpha", 10000, _numberOfTopStocks, _rebalanceDate, _rebalanceTime);
 
             SetUniverseSelection(UniverseSelection);
             SetAlpha(AlphaModel);

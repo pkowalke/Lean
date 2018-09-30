@@ -31,22 +31,30 @@ namespace QuantConnect.Algorithm.Framework.Alphas
     /// </summary>
     public class _Mom_Based_Rotation_AM : AlphaModel
     {
-        IDictionary<String, String> _alpha_universe;
+        //Alpha Model wide variables
+
+        private IDictionary<String, String> _alpha_universe;
 
         private List<Insight> _previousInsights = new List<Insight>();
 
         //variables specific to Mom_Based_Alpha
+
+        private String _Mom_Based_Alpha_Name;
+
+        private Dictionary<Symbol, SymbolData> _Mom_Based_Alpha_SymbolDataBySymbol;
+
+        private List<Insight> _Mom_Based_Alpha_previousInsights = new List<Insight>();
+
         private bool _Mom_Based_Alpha_initialized = false;
+
         private int _Mom_Based_Alpha_momentumPeriod;
         private Resolution _Mom_Based_Alpha_momentumResolution;
         private Resolution _Mom_Based_Alpha_resolution;
-        private Dictionary<Symbol, SymbolData> _Mom_Based_Alpha_SymbolDataBySymbol;
-        private List<Insight> _Mom_Based_Alpha_previousInsights = new List<Insight>();
-        private Scheduling.IDateRule _Mom_Based_Alpha_rebalanceDate;
-        private Scheduling.ITimeRule _Mom_Based_Alpha_rebalanceTime;
+        private readonly int _Mom_Based_Alpha_didNotGetDataTimesThreshold = 6;
+        private readonly int _Mom_Based_Alpha_exchangeClosedThreshold = 6;
 
-        private readonly int _didNotGetDataTimesThreshold = 6;
-        private readonly int _exchangeClosedThreshold = 6;
+        private Scheduling.IDateRule _Mom_Based_Alpha_rebalanceDate;
+        private Scheduling.ITimeRule _Mom_Based_Alpha_rebalanceTime;        
 
         public _Mom_Based_Rotation_AM(IDictionary<String, String> alphaUniverse)
         {
@@ -66,10 +74,11 @@ namespace QuantConnect.Algorithm.Framework.Alphas
             return _Mom_Based_Alpha_initialized;
         }
 
-        public void InitMomBasedInsights(int momentumPeriod, Resolution momentumResolution, Resolution resolution, Scheduling.IDateRule rebalanceDate, Scheduling.ITimeRule rebalanceTime)
+        public void InitMomBasedInsights(String alphaModelName, int momentumPeriod, Resolution momentumResolution, Resolution resolution, Scheduling.IDateRule rebalanceDate, Scheduling.ITimeRule rebalanceTime)
         {
             if (momentumResolution != Resolution.Daily) throw new NotImplementedException("Resolution of momentum must be Daily.");
             if (resolution != Resolution.Minute) throw new NotImplementedException("Resolution must be minute.");
+            _Mom_Based_Alpha_Name = alphaModelName;
             _Mom_Based_Alpha_momentumPeriod = momentumPeriod;
             _Mom_Based_Alpha_momentumResolution = momentumResolution; // must be daily
             _Mom_Based_Alpha_resolution = resolution; //must be minute
@@ -107,7 +116,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                     stocksWithoutData.Add(sd.Security.Symbol.Value);
                     sd.ConsecutiveMissingData++;
 
-                    if (sd.ConsecutiveMissingData > _didNotGetDataTimesThreshold)
+                    if (sd.ConsecutiveMissingData > _Mom_Based_Alpha_didNotGetDataTimesThreshold)
                     {
                         stocksWithoutDataBlacklist.Add(sd.Security.Symbol.Value);
 
@@ -115,7 +124,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                             "Time: {0}. Stock: {1} hitting maximum consecutive runs without data ({2}). Data missing {3} times.",
                             algorithm.Time.ToString(),
                             sd.Security.Symbol.Value,
-                            _didNotGetDataTimesThreshold.ToString(),
+                            _Mom_Based_Alpha_didNotGetDataTimesThreshold.ToString(),
                             sd.ConsecutiveMissingData.ToString()
                             ));
                     }
@@ -132,7 +141,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                     stocksWithExchangeClosed.Add(sd.Security.Symbol.Value);
                     sd.ConsecutiveExchangeClosed++;
 
-                    if (sd.ConsecutiveExchangeClosed > _exchangeClosedThreshold)
+                    if (sd.ConsecutiveExchangeClosed > _Mom_Based_Alpha_exchangeClosedThreshold)
                     {
                         stocksWithExchangeClosedBlacklist.Add(sd.Security.Symbol.Value);
 
@@ -140,7 +149,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                             "Time: {0}. Stock: {1} hitting maximum consecutive runs with closed Exchange ({2}). Occured {3} times.",
                             algorithm.Time.ToString(),
                             sd.Security.Symbol.Value,
-                            _exchangeClosedThreshold.ToString(),
+                            _Mom_Based_Alpha_exchangeClosedThreshold.ToString(),
                             sd.ConsecutiveExchangeClosed.ToString()
                             ));
                     }
@@ -189,8 +198,8 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                  on pi.Symbol.Value equals noCons
                  join sd in _Mom_Based_Alpha_SymbolDataBySymbol.Values
                  on pi.Symbol.Value equals sd.Security.Symbol.Value
-                 where sd.ConsecutiveExchangeClosed <= _exchangeClosedThreshold &&
-                 sd.ConsecutiveMissingData <= _didNotGetDataTimesThreshold
+                 where sd.ConsecutiveExchangeClosed <= _Mom_Based_Alpha_exchangeClosedThreshold &&
+                 sd.ConsecutiveMissingData <= _Mom_Based_Alpha_didNotGetDataTimesThreshold
                  select pi)
                  .ToList();
 
@@ -211,7 +220,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                      (sd.MOM > 0) ? InsightDirection.Up : (sd.MOM < 0) ? InsightDirection.Down : InsightDirection.Flat,
                      (double)(100 * (sd.MOM / _Mom_Based_Alpha_momentumPeriod)),
                      null,
-                     "Mom_Based_Alpha"))
+                     _Mom_Based_Alpha_Name))
                 .ToList();
 
             _Mom_Based_Alpha_previousInsights = new List<Insight>();
@@ -247,7 +256,8 @@ namespace QuantConnect.Algorithm.Framework.Alphas
 
                 return _previousInsights;
             }
-            else return new List<Insight>();
+            else
+                return new List<Insight>();
         }
 
         /// <summary>
