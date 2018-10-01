@@ -24,7 +24,7 @@ namespace QuantConnect.Algorithm.Framework.Risk
     /// Provides an implementation of <see cref="IRiskManagementModel"/> that limits the drawdown
     /// per holding to the specified percentage
     /// </summary>
-    public class _Mom_Based_Rotation_RM : RiskManagementModel
+    public class _QCWhatRiskMgmtModel : RiskManagementModel
     {
         private readonly decimal _maximumDrawdownPercent;
 
@@ -32,7 +32,7 @@ namespace QuantConnect.Algorithm.Framework.Risk
         /// Initializes a new instance of the <see cref="MaximumDrawdownPercentPerSecurity"/> class
         /// </summary>
         /// <param name="maximumDrawdownPercent">The maximum percentage drawdown allowed for any single security holding, defaults to 5% drawdown per security</param>
-        public _Mom_Based_Rotation_RM(
+        public _QCWhatRiskMgmtModel(
             decimal maximumDrawdownPercent = 0.05m
             )
         {

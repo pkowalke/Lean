@@ -23,7 +23,7 @@ namespace QuantConnect.Algorithm.Framework.Execution
     /// Provides an implementation of <see cref="IExecutionModel"/> that immediately submits
     /// market orders to achieve the desired portfolio targets
     /// </summary>
-    public class _Mom_Based_Rotation_EM : ExecutionModel
+    public class _QCWhatExecutionModel : ExecutionModel
     {
         private readonly PortfolioTargetCollection _targetsCollection = new PortfolioTargetCollection();
 

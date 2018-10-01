@@ -39,7 +39,7 @@ namespace QuantConnect.Algorithm.Framework
 {
     /// <meta name="tag" content="MOM" />
     /// <meta name="tag" content="Momentum" />
-    public partial class _Mom_Based_Rotation_QCFA : QCAlgorithmFramework
+    public partial class _QCWhatAlgo : QCAlgorithmFramework
     {
         private readonly DateTime _startDate = new DateTime(2018, 01, 01);
         private readonly DateTime _endDate = new DateTime(2018, 09, 19);
@@ -152,8 +152,10 @@ namespace QuantConnect.Algorithm.Framework
         private Slice _lastNonEmptySlice;
 
         public IUniverseSelectionModel UniverseSelection;
-        public _Mom_Based_Rotation_AM AlphaModel;
-        public _Mom_Based_Rotation_PCM PortfolioConstruction;
+        public IAlphaModel CompositeAlphaModel;
+        public _QCWhatPortfolioConstrModel PortfolioConstruction;
+
+        public _QCWhatMomBasedAlphaModel MomBasedRotationAlphaModel;
 
         public override void Initialize()
         {
@@ -173,17 +175,18 @@ namespace QuantConnect.Algorithm.Framework
             _rebalanceTime = TimeRules.At(_rebalanceHour, _rebalanceMinute, TimeZone);
             _rebalanceDate = DateRules.Every(_rebalanceDaysOfWeek);
 
-            UniverseSelection = new _Mom_Based_Rotation_SM(_symbols, this.UniverseSettings, this.SecurityInitializer);
-            AlphaModel = new _Mom_Based_Rotation_AM(AlphaUniverse);
-            AlphaModel.InitMomBasedInsights("Mom_Based_Alpha", _momentumPeriod, _momentumResolution, _resolution, _rebalanceDate, _rebalanceTime);
-            PortfolioConstruction = new _Mom_Based_Rotation_PCM(AlphaUniverse);
+            MomBasedRotationAlphaModel = new _QCWhatMomBasedAlphaModel(AlphaUniverse, "Mom_Based_Alpha", _momentumPeriod, _momentumResolution, _resolution, _rebalanceDate, _rebalanceTime);
+
+            UniverseSelection = new _QCWhatSelectionModel(_symbols, this.UniverseSettings, this.SecurityInitializer);
+            CompositeAlphaModel = new CompositeAlphaModel(MomBasedRotationAlphaModel);
+            PortfolioConstruction = new _QCWhatPortfolioConstrModel(AlphaUniverse);
             PortfolioConstruction.InitMomBasedPortfolioConstruction("Mom_Based_Alpha", 10000, _numberOfTopStocks, _rebalanceDate, _rebalanceTime);
 
             SetUniverseSelection(UniverseSelection);
-            SetAlpha(AlphaModel);
+            SetAlpha(CompositeAlphaModel);
             //SetRiskManagement(new _Mom_Based_Rotation_RM(0.5m));
             SetPortfolioConstruction(PortfolioConstruction);
-            SetExecution(new _Mom_Based_Rotation_EM());
+            SetExecution(new _QCWhatExecutionModel());
 
             Schedule.On(_rebalanceDate, _rebalanceTime, CreateTargets);
         }
@@ -238,7 +241,7 @@ namespace QuantConnect.Algorithm.Framework
         public override void OnOrderEvent(OrderEvent orderEvent)
         {
             //update PCM with order statuses
-            ((_Mom_Based_Rotation_PCM)(PortfolioConstruction)).AddOrderEvent(this, orderEvent);
+            ((_QCWhatPortfolioConstrModel)(PortfolioConstruction)).AddOrderEvent(this, orderEvent);
         }
 
         public bool CanRunLocally { get; } = true;

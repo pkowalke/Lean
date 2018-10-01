@@ -29,7 +29,7 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
     /// insights of direction <see cref="InsightDirection.Up"/>, long targets are returned and for insights of direction
     /// <see cref="InsightDirection.Down"/>, short targets are returned.
     /// </summary>
-    public class _Mom_Based_Rotation_PCM : PortfolioConstructionModel
+    public class _QCWhatPortfolioConstrModel : PortfolioConstructionModel
     {
         //Portfolio Construction  Model wide variables
 
@@ -47,7 +47,7 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
 
 
 
-        public _Mom_Based_Rotation_PCM(IDictionary<String, String> alphaUniverse)
+        public _QCWhatPortfolioConstrModel(IDictionary<String, String> alphaUniverse)
         {
             _alpha_universe = alphaUniverse;
         }
@@ -282,7 +282,7 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
             /// <returns></returns>
             public Decimal GetCurrentAlphaModelHoldings(QCAlgorithmFramework algorithm)
             {
-                String universeName = ((_Mom_Based_Rotation_QCFA)algorithm).AlphaUniverse[_alphaName];
+                String universeName = ((_QCWhatAlgo)algorithm).AlphaUniverse[_alphaName];
 
                 Decimal investedSecuritiesForCurrentAlpha =
                     (from m in algorithm.UniverseManager[universeName].Members
@@ -362,10 +362,11 @@ namespace QuantConnect.Algorithm.Framework.Portfolio
 
                     if ((_newTargets.Count) != _numberOfTopStocks - j)
                     {
-                        algorithm.Error(String.Format("Time: {0}. There are not enough insights with positive direction to create requested number of targets. Emptying the list of new targets!!!",
+                        algorithm.Error(String.Format("Time: {0}. There are not enough insights with positive direction to create requested number of targets. Liquidating!!!",
                             algorithm.Time.ToString()));
 
                         _newTargets = new List<PortfolioTargetTracking>();
+                        break;
                     }
 
                     List<PortfolioTargetTracking> newTargetsWithQuantityLessThanOne = _newTargets.Where(x => x.Target.Quantity < 1m).Select(y => y).ToList();

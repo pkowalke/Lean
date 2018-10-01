@@ -25,7 +25,7 @@ using QuantConnect.Securities;
 
 namespace QuantConnect.Algorithm.Framework.Selection
 {
-    public class _Mom_Based_Rotation_SM : UniverseSelectionModel
+    public class _QCWhatSelectionModel : UniverseSelectionModel
     {
         private static readonly MarketHoursDatabase MarketHours = MarketHoursDatabase.FromDataFolder();
 
@@ -34,22 +34,22 @@ namespace QuantConnect.Algorithm.Framework.Selection
         private readonly ISecurityInitializer _securityInitializer;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="_Mom_Based_Rotation_SM"/> class using the algorithm's
+        /// Initializes a new instance of the <see cref="_QCWhatSelectionModel"/> class using the algorithm's
         /// security initializer and universe settings
         /// </summary>
         /// <param name="symbols">The symbols to subscribe to</param>
-        public _Mom_Based_Rotation_SM(IDictionary<String, List<Symbol>> symbols)
+        public _QCWhatSelectionModel(IDictionary<String, List<Symbol>> symbols)
             : this(symbols, null, null)
         {
         }
 
          /// <summary>
-        /// Initializes a new instance of the <see cref="_Mom_Based_Rotation_SM"/> class
+        /// Initializes a new instance of the <see cref="_QCWhatSelectionModel"/> class
         /// </summary>
         /// <param name="symbols">The symbols to subscribe to</param>
         /// <param name="universeSettings">The settings used when adding symbols to the algorithm, specify null to use algorthm.UniverseSettings</param>
         /// <param name="securityInitializer">Optional security initializer invoked when creating new securities, specify null to use algorithm.SecurityInitializer</param>
-        public _Mom_Based_Rotation_SM(IDictionary<String, List<Symbol>> symbols, UniverseSettings universeSettings, ISecurityInitializer securityInitializer)
+        public _QCWhatSelectionModel(IDictionary<String, List<Symbol>> symbols, UniverseSettings universeSettings, ISecurityInitializer securityInitializer)
         {
             _symbols = symbols;
 
@@ -67,7 +67,7 @@ namespace QuantConnect.Algorithm.Framework.Selection
 
                 foreach (Symbol s in ls)
                 {
-                    SymbolCache.Set(s.Value, s);
+                    SymbolCache.Set(s.Value, s);                   
                 }
             }
         }
@@ -94,7 +94,7 @@ namespace QuantConnect.Algorithm.Framework.Selection
 
                     var market = grp.Key.Market;
                     var securityType = grp.Key.SecurityType;
-                    var universeSymbol = Symbol.Create($"_Mom_Based_Rotation_SM-{alphaModelSymbols.Key}-{securityType}-{market}", securityType, market);
+                    var universeSymbol = Symbol.Create($"_QCWHAT-{alphaModelSymbols.Key}-{securityType}-{market}", securityType, market);
                     if (securityType == SecurityType.Base)
                     {
                         // add an entry for this custom universe symbol -- we don't really know the time zone for sure,

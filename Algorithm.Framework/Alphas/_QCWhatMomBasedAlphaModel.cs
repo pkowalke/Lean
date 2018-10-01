@@ -29,63 +29,36 @@ namespace QuantConnect.Algorithm.Framework.Alphas
     /// <summary>
     /// Alpha model that uses historical returns to create insights
     /// </summary>
-    public class _Mom_Based_Rotation_AM : AlphaModel
+    public class _QCWhatMomBasedAlphaModel : AlphaModel
     {
-        //Alpha Model wide variables
+        private IDictionary<String, String> _alphaUniverse;
 
-        private IDictionary<String, String> _alpha_universe;
+        private Dictionary<Symbol, SymbolData> _SymbolDataBySymbol;
 
         private List<Insight> _previousInsights = new List<Insight>();
 
-        //variables specific to Mom_Based_Alpha
+        private int _momentumPeriod;
+        private Resolution _momentumResolution;
+        private Resolution _resolution;
+        private readonly int _didNotGetDataTimesThreshold = 6; //this is set only in here, not carried over from Initialize
+        private readonly int _exchangeClosedThreshold = 6; //this is set only in here, not carried over from Initialize
 
-        private String _Mom_Based_Alpha_Name;
+        private Scheduling.IDateRule _rebalanceDate;
+        private Scheduling.ITimeRule _rebalanceTime;        
 
-        private Dictionary<Symbol, SymbolData> _Mom_Based_Alpha_SymbolDataBySymbol;
-
-        private List<Insight> _Mom_Based_Alpha_previousInsights = new List<Insight>();
-
-        private bool _Mom_Based_Alpha_initialized = false;
-
-        private int _Mom_Based_Alpha_momentumPeriod;
-        private Resolution _Mom_Based_Alpha_momentumResolution;
-        private Resolution _Mom_Based_Alpha_resolution;
-        private readonly int _Mom_Based_Alpha_didNotGetDataTimesThreshold = 6;
-        private readonly int _Mom_Based_Alpha_exchangeClosedThreshold = 6;
-
-        private Scheduling.IDateRule _Mom_Based_Alpha_rebalanceDate;
-        private Scheduling.ITimeRule _Mom_Based_Alpha_rebalanceTime;        
-
-        public _Mom_Based_Rotation_AM(IDictionary<String, String> alphaUniverse)
+        public _QCWhatMomBasedAlphaModel(IDictionary<String, String> alphaUniverse, String alphaModelName, int momentumPeriod, Resolution momentumResolution, Resolution resolution, Scheduling.IDateRule rebalanceDate, Scheduling.ITimeRule rebalanceTime)
         {
-            _alpha_universe = alphaUniverse;
+            _alphaUniverse = alphaUniverse;
 
-            Name = $"{nameof(_Mom_Based_Rotation_AM)}";
-
-            Name +=
-                String.Concat(
-                (from au in _alpha_universe
-                 select String.Format("*{0}-{1}*", au.Key, au.Value))
-                .ToArray());
-        }
-
-        public bool IsInitializedMomBased()
-        {
-            return _Mom_Based_Alpha_initialized;
-        }
-
-        public void InitMomBasedInsights(String alphaModelName, int momentumPeriod, Resolution momentumResolution, Resolution resolution, Scheduling.IDateRule rebalanceDate, Scheduling.ITimeRule rebalanceTime)
-        {
             if (momentumResolution != Resolution.Daily) throw new NotImplementedException("Resolution of momentum must be Daily.");
             if (resolution != Resolution.Minute) throw new NotImplementedException("Resolution must be minute.");
-            _Mom_Based_Alpha_Name = alphaModelName;
-            _Mom_Based_Alpha_momentumPeriod = momentumPeriod;
-            _Mom_Based_Alpha_momentumResolution = momentumResolution; // must be daily
-            _Mom_Based_Alpha_resolution = resolution; //must be minute
-            _Mom_Based_Alpha_rebalanceDate = rebalanceDate;
-            _Mom_Based_Alpha_rebalanceTime = rebalanceTime;
-            _Mom_Based_Alpha_SymbolDataBySymbol = new Dictionary<Symbol, SymbolData>();
-            _Mom_Based_Alpha_initialized = true;
+            Name = alphaModelName;
+            _momentumPeriod = momentumPeriod;
+            _momentumResolution = momentumResolution; // must be daily
+            _resolution = resolution; //must be minute
+            _rebalanceDate = rebalanceDate;
+            _rebalanceTime = rebalanceTime;
+            _SymbolDataBySymbol = new Dictionary<Symbol, SymbolData>();
         }
 
         public IEnumerable<Insight> UpdateMomBasedInsights(QCAlgorithmFramework algorithm, Slice data)
@@ -99,7 +72,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
             List<String> stocksWithoutDataBlacklist = new List<string>();
             List<String> stocksWithExchangeClosedBlacklist = new List<string>();
 
-            foreach (SymbolData sd in _Mom_Based_Alpha_SymbolDataBySymbol.Values)
+            foreach (SymbolData sd in _SymbolDataBySymbol.Values)
             {
                 // Just in case (taught by problems with scheduler firing events at the right time in backtest)
                 // scan the consolidator for changes.
@@ -116,15 +89,15 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                     stocksWithoutData.Add(sd.Security.Symbol.Value);
                     sd.ConsecutiveMissingData++;
 
-                    if (sd.ConsecutiveMissingData > _Mom_Based_Alpha_didNotGetDataTimesThreshold)
+                    if (sd.ConsecutiveMissingData > _didNotGetDataTimesThreshold)
                     {
                         stocksWithoutDataBlacklist.Add(sd.Security.Symbol.Value);
 
-                        algorithm.Error(String.Format(
+                        algorithm.Debug(String.Format(
                             "Time: {0}. Stock: {1} hitting maximum consecutive runs without data ({2}). Data missing {3} times.",
                             algorithm.Time.ToString(),
                             sd.Security.Symbol.Value,
-                            _Mom_Based_Alpha_didNotGetDataTimesThreshold.ToString(),
+                            _didNotGetDataTimesThreshold.ToString(),
                             sd.ConsecutiveMissingData.ToString()
                             ));
                     }
@@ -141,15 +114,15 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                     stocksWithExchangeClosed.Add(sd.Security.Symbol.Value);
                     sd.ConsecutiveExchangeClosed++;
 
-                    if (sd.ConsecutiveExchangeClosed > _Mom_Based_Alpha_exchangeClosedThreshold)
+                    if (sd.ConsecutiveExchangeClosed > _exchangeClosedThreshold)
                     {
                         stocksWithExchangeClosedBlacklist.Add(sd.Security.Symbol.Value);
 
-                        algorithm.Error(String.Format(
+                        algorithm.Debug(String.Format(
                             "Time: {0}. Stock: {1} hitting maximum consecutive runs with closed Exchange ({2}). Occured {3} times.",
                             algorithm.Time.ToString(),
                             sd.Security.Symbol.Value,
-                            _Mom_Based_Alpha_exchangeClosedThreshold.ToString(),
+                            _exchangeClosedThreshold.ToString(),
                             sd.ConsecutiveExchangeClosed.ToString()
                             ));
                     }
@@ -160,12 +133,33 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                 {
                     stocksNotConsolidated.Add(sd.Security.Symbol.Value);
                 }
+
+                // Print out stocks that were "blacklisted" due to not having data or having exchange closed
+                // too many consecutive times
+                if (stocksWithoutDataBlacklist.Contains(sd.Security.Symbol.Value))
+                {
+                    algorithm.Error(String.Format(
+                            "Time: {0}. Stock: {1} has been blacklisted for not having new data!",
+                            algorithm.Time.ToString(),
+                            sd.Security.Symbol.Value
+                            ));
+                }
+
+                if (stocksWithExchangeClosedBlacklist.Contains(sd.Security.Symbol.Value))
+                {
+                    algorithm.Error(String.Format(
+                            "Time: {0}. Stock: {1} has been blacklisted for its exchange being closed during runs!",
+                            algorithm.Time.ToString(),
+                            sd.Security.Symbol.Value
+                            ));
+                }
             }
 
-            //all exchanges closed is non-existent condition
-            if (stocksNotConsolidated.Count == _Mom_Based_Alpha_SymbolDataBySymbol.Count ||
-                stocksWithoutData.Count == _Mom_Based_Alpha_SymbolDataBySymbol.Count ||
-                stocksWithExchangeClosed.Count == _Mom_Based_Alpha_SymbolDataBySymbol.Count)
+            //if ALL stocks are blacklisted for not having new data or their exchange being closed
+            //then return no insights.
+            if (stocksNotConsolidated.Count == _SymbolDataBySymbol.Count ||
+                stocksWithoutData.Count == _SymbolDataBySymbol.Count ||
+                stocksWithExchangeClosed.Count == _SymbolDataBySymbol.Count)
             {
                 algorithm.Error(String.Format(
                     "Time: {0}. All stocks were not consolidated ({1}) or all without data ({2}) or all with exchange not open ({3}).",
@@ -175,36 +169,59 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                     stocksWithExchangeClosed.Count.ToString()
                     ));
 
-                if (stocksWithoutDataBlacklist.Count == _Mom_Based_Alpha_SymbolDataBySymbol.Count ||
-                    stocksWithExchangeClosedBlacklist.Count == _Mom_Based_Alpha_SymbolDataBySymbol.Count)
+                if (stocksWithoutDataBlacklist.Count == _SymbolDataBySymbol.Count ||
+                    stocksWithExchangeClosedBlacklist.Count == _SymbolDataBySymbol.Count)
                 {
+                    algorithm.Error(String.Format(
+                    "Time: {0}. Threshhold reached for all stocks! I will return no new insights! All stocks were not consolidated ({1}) or all without data ({2}) or all with exchange not open ({3}).",
+                    algorithm.Time.ToString(),
+                    stocksNotConsolidated.Count.ToString(),
+                    stocksWithoutData.Count.ToString(),
+                    stocksWithExchangeClosed.Count.ToString()
+                    ));
+
                     // if all stocks had exchange closed or no data too many times, than return no insights
-                    _Mom_Based_Alpha_previousInsights = new List<Insight>();
-                    return _Mom_Based_Alpha_previousInsights;
+                    _previousInsights = new List<Insight>();
+                    return _previousInsights;
                 }
 
                 // i f all stocks had exchange closed or no data but threshold was not met for all than return previous insights
-                return _Mom_Based_Alpha_previousInsights;
+                return _previousInsights;
             }
 
-            // carry over insights that have exchange closed or missing data, but did not hit threshold in that
-            List<Insight> insightsToBeCarriedOver =
-                (from pi in _Mom_Based_Alpha_previousInsights
+
+            // carry over insights that have exchange closed or missing data or did not consolidate, but did not hit threshold in that
+            List<Insight> closedExchOrNoDataOrNoCons =
+                ((from pi1 in _previousInsights
                  join closedExch in stocksWithExchangeClosed
-                 on pi.Symbol.Value equals closedExch
-                 join noData in stocksWithoutData
-                 on pi.Symbol.Value equals noData
-                 join noCons in stocksNotConsolidated
-                 on pi.Symbol.Value equals noCons
-                 join sd in _Mom_Based_Alpha_SymbolDataBySymbol.Values
-                 on pi.Symbol.Value equals sd.Security.Symbol.Value
-                 where sd.ConsecutiveExchangeClosed <= _Mom_Based_Alpha_exchangeClosedThreshold &&
-                 sd.ConsecutiveMissingData <= _Mom_Based_Alpha_didNotGetDataTimesThreshold
-                 select pi)
+                 on pi1.Symbol.Value equals closedExch
+                 select pi1)
+                 .Union(
+                 (from pi2 in _previousInsights
+                  join noData in stocksWithoutData
+                  on pi2.Symbol.Value equals noData
+                  select pi2))
+                  .Union(
+                    (from pi3 in _previousInsights
+                    join noCons in stocksNotConsolidated
+                    on pi3.Symbol.Value equals noCons
+                    select pi3)))
+                    .Distinct()
+                  .ToList();
+
+            List<Insight> insightsToBeCarriedOver =
+                (from ceondonc in closedExchOrNoDataOrNoCons
+                 join sd in _SymbolDataBySymbol.Values
+                 on ceondonc.Symbol.Value equals sd.Security.Symbol.Value
+                 where sd.ConsecutiveExchangeClosed <= _exchangeClosedThreshold &&
+                 sd.ConsecutiveMissingData <= _didNotGetDataTimesThreshold
+                 select ceondonc)
                  .ToList();
 
+            //new insights created for stocks with open exchange, data, that consolidated, that have SymbolData ready,
+            //that have positive price in the consolidator
             List<Insight> insightsNew =
-                (from sd in _Mom_Based_Alpha_SymbolDataBySymbol.Values
+                (from sd in _SymbolDataBySymbol.Values
                  join inData in stocksWithData
                  on sd.Security.Symbol.Value equals inData
                  join openExch in stocksWithExchangeOpen
@@ -218,24 +235,21 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                      sd.Security.Symbol,
                      new DateTime(algorithm.Time.Year, algorithm.Time.Month, algorithm.Time.Day, 23, 59, 59, 999),
                      (sd.MOM > 0) ? InsightDirection.Up : (sd.MOM < 0) ? InsightDirection.Down : InsightDirection.Flat,
-                     (double)(100 * (sd.MOM / _Mom_Based_Alpha_momentumPeriod)),
+                     Math.Abs((double)(100 * (sd.MOM / _momentumPeriod))),
                      null,
-                     _Mom_Based_Alpha_Name))
+                     Name))
                 .ToList();
 
-            _Mom_Based_Alpha_previousInsights = new List<Insight>();
-            _Mom_Based_Alpha_previousInsights.AddRange(insightsToBeCarriedOver);
-            _Mom_Based_Alpha_previousInsights.AddRange(insightsNew);
+            _previousInsights = new List<Insight>();
+            _previousInsights.AddRange(insightsToBeCarriedOver);
+            _previousInsights.AddRange(insightsNew);
 
-            if (_Mom_Based_Alpha_previousInsights.Count() != _Mom_Based_Alpha_SymbolDataBySymbol.Count)
-            {
-                algorithm.Error(String.Format("Time: {0}. Returning {1} insights for {2} symbols.",
-                    algorithm.Time.ToString(),
-                    _previousInsights.Count.ToString(),
-                    _Mom_Based_Alpha_SymbolDataBySymbol.Count.ToString()));
-            }
+            algorithm.Error(String.Format("Time: {0}. Returning {1} insights for {2} symbols.",
+                algorithm.Time.ToString(),
+                _previousInsights.Count.ToString(),
+                _SymbolDataBySymbol.Count.ToString()));
 
-            return _Mom_Based_Alpha_previousInsights;
+            return _previousInsights;
         }
 
         /// <summary>
@@ -247,36 +261,35 @@ namespace QuantConnect.Algorithm.Framework.Alphas
         /// <returns>The new insights generated</returns>
         public override IEnumerable<Insight> Update(QCAlgorithmFramework algorithm, Slice data)
         {
-            // update was called by scheduler at is rebalance time
-            if (_Mom_Based_Alpha_rebalanceDate.GetDates(algorithm.Time.Date, algorithm.Time.Date).Count() == 1 &&
-                    _Mom_Based_Alpha_rebalanceTime.CreateUtcEventTimes( new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(h => h.Hour).Contains(algorithm.Time.Hour) &&
-                    _Mom_Based_Alpha_rebalanceTime.CreateUtcEventTimes( new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(m => m.Minute).Contains(algorithm.Time.Minute))
+            // if update was called by scheduler at is rebalance time
+            if (_rebalanceDate.GetDates(algorithm.Time.Date, algorithm.Time.Date).Count() == 1 &&
+                    _rebalanceTime.CreateUtcEventTimes( new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(h => h.Hour).Contains(algorithm.Time.Hour) &&
+                    _rebalanceTime.CreateUtcEventTimes( new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(m => m.Minute).Contains(algorithm.Time.Minute))
             {
-                _previousInsights = UpdateMomBasedInsights(algorithm, data).ToList();
-
-                return _previousInsights;
+                return UpdateMomBasedInsights(algorithm, data).ToList();
             }
             else
                 return new List<Insight>();
         }
 
-        /// <summary>
-        /// Event fired each time the we add/remove securities from the data feed
-        /// </summary>
-        /// <param name="algorithm">The algorithm instance that experienced the change in securities</param>
-        /// <param name="changes">The security additions and removals from the algorithm</param>
         public override void OnSecuritiesChanged(QCAlgorithmFramework algorithm, SecurityChanges changes)
         {
-            IReadOnlyList<Security> removed =
+            String universeName =
+                (from kvp in _alphaUniverse
+                 where kvp.Key == Name
+                 select kvp.Value)
+                 .Single();
+
+            IReadOnlyList < Security > removed =
                 (from c in changes.RemovedSecurities
-                 join us in algorithm.UniverseManager["_MOM_BASED_ROTATION_SM-MOM_BASED_ALPHA_UNIVERSE-EQUITY-USA 2T"].Members
+                 join us in algorithm.UniverseManager[universeName].Members
                  on c.Symbol equals us.Key
                  select c)
                  .ToList<Security>();
 
             IReadOnlyList<Security> added =
                 (from c in changes.AddedSecurities
-                 join us in algorithm.UniverseManager["_MOM_BASED_ROTATION_SM-MOM_BASED_ALPHA_UNIVERSE-EQUITY-USA 2T"].Members
+                 join us in algorithm.UniverseManager[universeName].Members
                  on c.Symbol equals us.Key
                  select c)
                  .ToList<Security>();
@@ -285,9 +298,9 @@ namespace QuantConnect.Algorithm.Framework.Alphas
             foreach (var r in removed)
             {
                 SymbolData data;
-                if (_Mom_Based_Alpha_SymbolDataBySymbol.TryGetValue(r.Symbol, out data))
+                if (_SymbolDataBySymbol.TryGetValue(r.Symbol, out data))
                 {
-                    _Mom_Based_Alpha_SymbolDataBySymbol.Remove(r.Symbol);
+                    _SymbolDataBySymbol.Remove(r.Symbol);
                     algorithm.SubscriptionManager.RemoveConsolidator(r.Symbol, data.TBConsolidator);
                 }
             }
@@ -296,10 +309,10 @@ namespace QuantConnect.Algorithm.Framework.Alphas
             var addedSymbols = new List<Symbol>();
             foreach (var a in added)
             {
-                if (!_Mom_Based_Alpha_SymbolDataBySymbol.ContainsKey(a.Symbol))
+                if (!_SymbolDataBySymbol.ContainsKey(a.Symbol))
                 {
-                    var symbolData = new SymbolData(algorithm, a, _Mom_Based_Alpha_momentumPeriod, _Mom_Based_Alpha_momentumResolution);
-                    _Mom_Based_Alpha_SymbolDataBySymbol[a.Symbol] = symbolData;
+                    var symbolData = new SymbolData(algorithm, a, _momentumPeriod, _momentumResolution);
+                    _SymbolDataBySymbol[a.Symbol] = symbolData;
                     addedSymbols.Add(symbolData.Security.Symbol);
                 }
             }
@@ -307,11 +320,11 @@ namespace QuantConnect.Algorithm.Framework.Alphas
             if (addedSymbols.Count > 0)
             {
                 //warmup our indicators by pushing history through the consolidators
-                algorithm.History(addedSymbols, _Mom_Based_Alpha_momentumPeriod+1, _Mom_Based_Alpha_momentumResolution)
+                algorithm.History(addedSymbols, _momentumPeriod+1, _momentumResolution)
                 .PushThrough(bar =>
                 {
                     SymbolData symbolData;
-                    if (_Mom_Based_Alpha_SymbolDataBySymbol.TryGetValue(bar.Symbol, out symbolData))
+                    if (_SymbolDataBySymbol.TryGetValue(bar.Symbol, out symbolData))
                     {
                         symbolData.TBConsolidator.Update(bar);
                     }
