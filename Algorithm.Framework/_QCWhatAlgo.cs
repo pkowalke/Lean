@@ -41,47 +41,11 @@ namespace QuantConnect.Algorithm.Framework
     /// <meta name="tag" content="Momentum" />
     public partial class _QCWhatAlgo : QCAlgorithmFramework
     {
-        private readonly DateTime _startDate = new DateTime(2018, 01, 01);
-        private readonly DateTime _endDate = new DateTime(2018, 09, 19);
+        private readonly DateTime _startDate = new DateTime(2007, 01, 01);
+        private readonly DateTime _endDate = new DateTime(2018, 10, 04);
         private readonly Resolution _resolution = Resolution.Minute;
 
         private readonly Decimal _backtestCash = 10000;
-
-        /*private readonly IReadOnlyList<String> _symbolStrs = new List<String>
-        {
-            "AMZN",  //"Amazon.com"
-            "AAPL",  //"Apple"
-            "BA",  //"Boeing"
-            "BABA",  //"Alibaba"
-            "BAC",  //"Bank of America"
-            //"BRKb",  //"Berkshire Hathaway B"
-            "C",  //"Citigroup"
-            "CMCSA",  //"Comcast"
-            "CSCO",  //"Cisco"
-            "CVX",  //"Chevron"
-            "DIS",  //"Walt Disney"
-            "FB",  //"Facebook"
-            "GOOGL",  //"Alphabet A"
-            "HD",  //"Home Depot"
-            "INTC",  //"Intel"
-            "IVV", //Shares of SP500
-            "JNJ",  //"J&J"
-            "JPM",  //"JPMorgan"
-            "MSFT",  //"Microsoft"
-            "NFLX",  //"Netflix"
-            "NVDA",  //"NVIDIA"
-            "ORCL",  //"Oracle"
-            "PFE",  //"Pfizer"
-            "T",  //"AT&T"
-            "TSLA",  //"Tesla"
-            "UNH",  //"UnitedHealth"
-            "UNP", //Union Pacific Corp
-            "V",  //"Visa"
-            "VZ",  //"Verizon"
-            "WFC",  //"Wells Fargo&Co"
-            "WMT",  //"Walmart"
-            "XOM"  //"Exxon Mobil"
-        };*/
 
         private readonly IDictionary<String, List<Symbol>> _symbols = new Dictionary<string, List<Symbol>>()
         {
@@ -93,7 +57,7 @@ namespace QuantConnect.Algorithm.Framework
                 QuantConnect.Symbol.Create("BA", SecurityType.Equity, Market.USA),  //"Boeing"
                 QuantConnect.Symbol.Create("BABA", SecurityType.Equity, Market.USA),  //"Alibaba"
                 QuantConnect.Symbol.Create("BAC", SecurityType.Equity, Market.USA),  //"Bank of America"
-                //QuantConnect.Symbol.Create("BRKb", SecurityType.Equity, Market.USA),  //"Berkshire Hathaway B"
+                QuantConnect.Symbol.Create("BRKb", SecurityType.Equity, Market.USA),  //"Berkshire Hathaway B"
                 QuantConnect.Symbol.Create("C", SecurityType.Equity, Market.USA),  //"Citigroup"
                 QuantConnect.Symbol.Create("CMCSA", SecurityType.Equity, Market.USA),  //"Comcast"
                 QuantConnect.Symbol.Create("CSCO", SecurityType.Equity, Market.USA),  //"Cisco"
@@ -103,7 +67,6 @@ namespace QuantConnect.Algorithm.Framework
                 QuantConnect.Symbol.Create("GOOGL", SecurityType.Equity, Market.USA),  //"Alphabet A"
                 QuantConnect.Symbol.Create("HD", SecurityType.Equity, Market.USA),  //"Home Depot"
                 QuantConnect.Symbol.Create("INTC", SecurityType.Equity, Market.USA),  //"Intel"
-                QuantConnect.Symbol.Create("IVV", SecurityType.Equity, Market.USA), //Shares of SP500
                 QuantConnect.Symbol.Create("JNJ", SecurityType.Equity, Market.USA),  //"J&J"
                 QuantConnect.Symbol.Create("JPM", SecurityType.Equity, Market.USA),  //"JPMorgan"
                 QuantConnect.Symbol.Create("MSFT", SecurityType.Equity, Market.USA),  //"Microsoft"
@@ -119,7 +82,29 @@ namespace QuantConnect.Algorithm.Framework
                 QuantConnect.Symbol.Create("VZ", SecurityType.Equity, Market.USA),  //"Verizon"
                 QuantConnect.Symbol.Create("WFC", SecurityType.Equity, Market.USA),  //"Wells Fargo&Co"
                 QuantConnect.Symbol.Create("WMT", SecurityType.Equity, Market.USA),  //"Walmart"
-                QuantConnect.Symbol.Create("XOM", SecurityType.Equity, Market.USA)  //"Exxon Mobil"
+                QuantConnect.Symbol.Create("XOM", SecurityType.Equity, Market.USA),  //"Exxon Mobil"
+                
+               	QuantConnect.Symbol.Create("NBB", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("NBD", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("DMB", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("DSM", SecurityType.Equity, Market.USA),  //""
+                
+                QuantConnect.Symbol.Create("SLP", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("AU", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("SPKE", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("MTL", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("VIRT", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("MUX", SecurityType.Equity, Market.USA),  //""
+                
+                QuantConnect.Symbol.Create("MKC", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("STZ", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("EL", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("COST", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("CLX", SecurityType.Equity, Market.USA),  //""
+                QuantConnect.Symbol.Create("LMT", SecurityType.Equity, Market.USA),  //""
+                
+
+                
                 }
             },
 
@@ -127,18 +112,22 @@ namespace QuantConnect.Algorithm.Framework
                 new List<Symbol>
                 {
                 QuantConnect.Symbol.Create("TIP", SecurityType.Equity, Market.USA),  //"iShares TIPS Bond" 
+                QuantConnect.Symbol.Create("TLH", SecurityType.Equity, Market.USA),  //"iShares 10-20 Year Treasury Bond" //NBB, NBD, DSM, DMB for regular equity alternative
+                QuantConnect.Symbol.Create("IVV", SecurityType.Equity, Market.USA), //"iShares S&P 500"
+
                 }
-            }
+            },
         };
 
         public readonly IDictionary<String, String> AlphaUniverse = new Dictionary<string, string>()
         {
-            { "Mom_Based_Alpha", "_MOM_BASED_ROTATION_SM-MOM_BASED_ALPHA_UNIVERSE-EQUITY-USA 2T" }
+            { "Mom_Based_Alpha", "_QCWHAT-MOM_BASED_ALPHA_UNIVERSE-EQUITY-USA 2T" },
+            { "Save_Heaven_Constant_Alpha", "_QCWHAT-SAFE_HEAVEN_UNIVERSE-EQUITY-USA 2T" }
         };
 
-        private readonly int _momentumPeriod = 60;
+        private readonly int _momentumPeriod = 275;
         private readonly Resolution _momentumResolution = Resolution.Daily;
-        private readonly int _numberOfTopStocks = 3;
+        private readonly int _numberOfTopStocks = 5;
 
         //actual rebalance of the portfolio or placement of orders based portfolio targets should happen at these times
         private readonly int _rebalanceHour = 8;
@@ -155,10 +144,14 @@ namespace QuantConnect.Algorithm.Framework
         public IAlphaModel CompositeAlphaModel;
         public _QCWhatPortfolioConstrModel PortfolioConstruction;
 
-        public _QCWhatMomBasedAlphaModel MomBasedRotationAlphaModel;
+        //public _QCWhatMomBasedAlphaModel MomBasedRotationAlphaModel;
+        public _QCWhatMomentumAlphaModel MomBasedRotationAlphaModel;
+
+        public _QCWhatSafeHeavenConstantAlphaModel SaveHeavenConstantAlphaModel;
 
         public override void Initialize()
         {
+            SetSecurityInitializer(x => x.SetDataNormalizationMode(DataNormalizationMode.TotalReturn));
             SetBrokerageModel(Brokerages.BrokerageName.InteractiveBrokersBrokerage, AccountType.Margin);
 
             SetStartDate(_startDate);
@@ -175,17 +168,25 @@ namespace QuantConnect.Algorithm.Framework
             _rebalanceTime = TimeRules.At(_rebalanceHour, _rebalanceMinute, TimeZone);
             _rebalanceDate = DateRules.Every(_rebalanceDaysOfWeek);
 
-            MomBasedRotationAlphaModel = new _QCWhatMomBasedAlphaModel(AlphaUniverse, "Mom_Based_Alpha", _momentumPeriod, _momentumResolution, _resolution, _rebalanceDate, _rebalanceTime);
-
             UniverseSelection = new _QCWhatSelectionModel(_symbols, this.UniverseSettings, this.SecurityInitializer);
-            CompositeAlphaModel = new CompositeAlphaModel(MomBasedRotationAlphaModel);
-            PortfolioConstruction = new _QCWhatPortfolioConstrModel(AlphaUniverse);
-            PortfolioConstruction.InitMomBasedPortfolioConstruction("Mom_Based_Alpha", 10000, _numberOfTopStocks, _rebalanceDate, _rebalanceTime);
-
             SetUniverseSelection(UniverseSelection);
+
+            //MomBasedRotationAlphaModel = new _QCWhatMomBasedAlphaModel(AlphaUniverse, "Mom_Based_Alpha", _momentumPeriod, _momentumResolution, _resolution, _rebalanceDate, _rebalanceTime);
+            MomBasedRotationAlphaModel = new _QCWhatMomentumAlphaModel();
+            SaveHeavenConstantAlphaModel = new _QCWhatSafeHeavenConstantAlphaModel(AlphaUniverse, "Save_Heaven_Constant_Alpha", InsightType.Price, InsightDirection.Flat, TimeSpan.FromDays(5), _rebalanceDate, _rebalanceTime);
+            CompositeAlphaModel = new CompositeAlphaModel(
+                MomBasedRotationAlphaModel,
+                SaveHeavenConstantAlphaModel
+                );
             SetAlpha(CompositeAlphaModel);
-            //SetRiskManagement(new _Mom_Based_Rotation_RM(0.5m));
+
+            PortfolioConstruction = new _QCWhatPortfolioConstrModel(AlphaUniverse, _backtestCash, _rebalanceDate, _rebalanceTime);
+            PortfolioConstruction.InitMomBasedPortfolioConstruction(this, "Mom_Based_Alpha", _numberOfTopStocks);
+            PortfolioConstruction.InitSaveHeavenConstantBasedPortfolioConstruction(this, "Save_Heaven_Constant_Alpha", 3);
             SetPortfolioConstruction(PortfolioConstruction);
+
+            SetRiskManagement(new _QCWhatRiskMgmtModel(0.15m));
+
             SetExecution(new _QCWhatExecutionModel());
 
             Schedule.On(_rebalanceDate, _rebalanceTime, CreateTargets);
@@ -199,16 +200,7 @@ namespace QuantConnect.Algorithm.Framework
                  select s)
                  .Count() >= 1)
             {
-                Semaphore s = new Semaphore(1, 1);
-                s.WaitOne();
-                Thread.Sleep(1000); //sleep 1 secs in case to let processes clear out of the model
-                _isRebalancingNow = true;
-
                 OnFrameworkData(_lastNonEmptySlice);
-                
-                _isRebalancingNow = false;
-                s.Release();
-                s.Dispose();
             }
         }
 

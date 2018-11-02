@@ -44,7 +44,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
         private readonly int _exchangeClosedThreshold = 6; //this is set only in here, not carried over from Initialize
 
         private Scheduling.IDateRule _rebalanceDate;
-        private Scheduling.ITimeRule _rebalanceTime;        
+        private Scheduling.ITimeRule _rebalanceTime;
 
         public _QCWhatMomBasedAlphaModel(IDictionary<String, String> alphaUniverse, String alphaModelName, int momentumPeriod, Resolution momentumResolution, Resolution resolution, Scheduling.IDateRule rebalanceDate, Scheduling.ITimeRule rebalanceTime)
         {
@@ -63,6 +63,7 @@ namespace QuantConnect.Algorithm.Framework.Alphas
 
         public IEnumerable<Insight> UpdateMomBasedInsights(QCAlgorithmFramework algorithm, Slice data)
         {
+
             List<String> stocksWithData = new List<string>();
             List<String> stocksWithoutData = new List<string>();
             List<String> stocksWithExchangeOpen = new List<string>();
@@ -72,87 +73,151 @@ namespace QuantConnect.Algorithm.Framework.Alphas
             List<String> stocksWithoutDataBlacklist = new List<string>();
             List<String> stocksWithExchangeClosedBlacklist = new List<string>();
 
-            foreach (SymbolData sd in _SymbolDataBySymbol.Values)
+
+            try
             {
-                // Just in case (taught by problems with scheduler firing events at the right time in backtest)
-                // scan the consolidator for changes.
-                sd.ScanUpdateConsolidator();
-
-                // Mark as missing data where consolidator did not consolidate on the day following previous trading day
-                if (sd.TBConsolidator.Consolidated.EndTime.Date == sd.Security.Exchange.Hours.GetPreviousTradingDay(algorithm.Time.Date).AddDays(1).Date)
+                foreach (SymbolData sd in _SymbolDataBySymbol.Values)
                 {
-                    stocksWithData.Add(sd.Security.Symbol.Value);
-                    sd.ConsecutiveMissingData = 0;
-                }
-                else
-                {
-                    stocksWithoutData.Add(sd.Security.Symbol.Value);
-                    sd.ConsecutiveMissingData++;
-
-                    if (sd.ConsecutiveMissingData > _didNotGetDataTimesThreshold)
+                    if (sd.Security.HasData && sd.TBConsolidator.Consolidated != null)
                     {
-                        stocksWithoutDataBlacklist.Add(sd.Security.Symbol.Value);
+                        // Just in case (taught by problems with scheduler firing events at the right time in backtest)
+                        // scan the consolidator for changes.
+                        try
+                        {
+                            sd.ScanUpdateConsolidator();
+                        }
+                        catch (Exception e)
+                        {
+                            throw new Exception(String.Format("Time: {0}. {1}. Exception scanning consolidator. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message));
+                        }
 
-                        algorithm.Debug(String.Format(
-                            "Time: {0}. Stock: {1} hitting maximum consecutive runs without data ({2}). Data missing {3} times.",
-                            algorithm.Time.ToString(),
-                            sd.Security.Symbol.Value,
-                            _didNotGetDataTimesThreshold.ToString(),
-                            sd.ConsecutiveMissingData.ToString()
-                            ));
+                        try
+                        {
+                            try
+                            {
+                                var _x = sd.TBConsolidator.Consolidated.EndTime;
+                            }
+                            catch (Exception e)
+                            {
+                                throw new Exception(String.Format("Time: {0}. {1}. Exception getting consolidator end time. Symbol: {3}. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message, sd.Security.Symbol.Value));
+                            }
+
+                            try
+                            {
+                                var _x = sd.Security.Exchange.Hours.GetPreviousTradingDay(algorithm.Time.Date).AddDays(1).Date;
+                            }
+                            catch (Exception e)
+                            {
+                                throw new Exception(String.Format("Time: {0}. {1}. Exception getting previous trade date. Symbol {3}. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message, sd.Security.Symbol.Value));
+                            }
+
+                            // Mark as missing data where consolidator did not consolidate on the day following previous trading day
+                            if (sd.TBConsolidator.Consolidated.EndTime.Date == sd.Security.Exchange.Hours.GetPreviousTradingDay(algorithm.Time.Date).AddDays(1).Date)
+                            {
+                                stocksWithData.Add(sd.Security.Symbol.Value);
+                                sd.ConsecutiveMissingData = 0;
+                            }
+                            else
+                            {
+                                stocksWithoutData.Add(sd.Security.Symbol.Value);
+                                sd.ConsecutiveMissingData++;
+
+                                if (sd.ConsecutiveMissingData > _didNotGetDataTimesThreshold)
+                                {
+                                    stocksWithoutDataBlacklist.Add(sd.Security.Symbol.Value);
+
+                                    algorithm.Debug(String.Format(
+                                        "Time: {0}. Stock: {1} hitting maximum consecutive runs without data ({2}). Data missing {3} times.",
+                                        algorithm.Time.ToString(),
+                                        sd.Security.Symbol.Value,
+                                        _didNotGetDataTimesThreshold.ToString(),
+                                        sd.ConsecutiveMissingData.ToString()
+                                        ));
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            throw new Exception(String.Format("Time: {0}. {1}. Exception checking for missing data. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message));
+                        }
+
+                        try
+                        {
+                            // Mark as closed exchange if particular symbol's exchange happens to be closed.
+                            if (sd.Security.Exchange.DateIsOpen(algorithm.Time.Date))
+                            {
+                                stocksWithExchangeOpen.Add(sd.Security.Symbol.Value);
+                                sd.ConsecutiveExchangeClosed = 0;
+                            }
+                            else
+                            {
+                                stocksWithExchangeClosed.Add(sd.Security.Symbol.Value);
+                                sd.ConsecutiveExchangeClosed++;
+
+                                if (sd.ConsecutiveExchangeClosed > _exchangeClosedThreshold)
+                                {
+                                    stocksWithExchangeClosedBlacklist.Add(sd.Security.Symbol.Value);
+
+                                    algorithm.Debug(String.Format(
+                                        "Time: {0}. Stock: {1} hitting maximum consecutive runs with closed Exchange ({2}). Occured {3} times.",
+                                        algorithm.Time.ToString(),
+                                        sd.Security.Symbol.Value,
+                                        _exchangeClosedThreshold.ToString(),
+                                        sd.ConsecutiveExchangeClosed.ToString()
+                                        ));
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            throw new Exception(String.Format("Time: {0}. {1}. Exception checking for closed exchange. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message));
+                        }
+
+                        try
+                        {
+                            // Mark as not consolidated if the initial consolidation did not occur
+                            if (!sd.IsReady())
+                            {
+                                stocksNotConsolidated.Add(sd.Security.Symbol.Value);
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            throw new Exception(String.Format("Time: {0}. {1}. Exception checking whether symbol is ready. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message));
+                        }
+
+                        try
+                        {
+                            // Print out stocks that were "blacklisted" due to not having data or having exchange closed
+                            // too many consecutive times
+                            if (stocksWithoutDataBlacklist.Contains(sd.Security.Symbol.Value))
+                            {
+                                algorithm.Error(String.Format(
+                                        "Time: {0}. Stock: {1} has been blacklisted for not having new data!",
+                                        algorithm.Time.ToString(),
+                                        sd.Security.Symbol.Value
+                                        ));
+                            }
+
+                            if (stocksWithExchangeClosedBlacklist.Contains(sd.Security.Symbol.Value))
+                            {
+                                algorithm.Error(String.Format(
+                                        "Time: {0}. Stock: {1} has been blacklisted for its exchange being closed during runs!",
+                                        algorithm.Time.ToString(),
+                                        sd.Security.Symbol.Value
+                                        ));
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            throw new Exception(String.Format("Time: {0}. {1}. Exception printing out blacklist message. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message));
+                        }
                     }
                 }
-
-                // Mark as closed exchange if particular symbol's exchange happens to be closed.
-                if (sd.Security.Exchange.DateIsOpen(algorithm.Time.Date))
-                {
-                    stocksWithExchangeOpen.Add(sd.Security.Symbol.Value);
-                    sd.ConsecutiveExchangeClosed = 0;
-                }
-                else
-                {
-                    stocksWithExchangeClosed.Add(sd.Security.Symbol.Value);
-                    sd.ConsecutiveExchangeClosed++;
-
-                    if (sd.ConsecutiveExchangeClosed > _exchangeClosedThreshold)
-                    {
-                        stocksWithExchangeClosedBlacklist.Add(sd.Security.Symbol.Value);
-
-                        algorithm.Debug(String.Format(
-                            "Time: {0}. Stock: {1} hitting maximum consecutive runs with closed Exchange ({2}). Occured {3} times.",
-                            algorithm.Time.ToString(),
-                            sd.Security.Symbol.Value,
-                            _exchangeClosedThreshold.ToString(),
-                            sd.ConsecutiveExchangeClosed.ToString()
-                            ));
-                    }
-                }
-
-                // Mark as not consolidated if the initial consolidation did not occur
-                if (!sd.IsReady())
-                {
-                    stocksNotConsolidated.Add(sd.Security.Symbol.Value);
-                }
-
-                // Print out stocks that were "blacklisted" due to not having data or having exchange closed
-                // too many consecutive times
-                if (stocksWithoutDataBlacklist.Contains(sd.Security.Symbol.Value))
-                {
-                    algorithm.Error(String.Format(
-                            "Time: {0}. Stock: {1} has been blacklisted for not having new data!",
-                            algorithm.Time.ToString(),
-                            sd.Security.Symbol.Value
-                            ));
-                }
-
-                if (stocksWithExchangeClosedBlacklist.Contains(sd.Security.Symbol.Value))
-                {
-                    algorithm.Error(String.Format(
-                            "Time: {0}. Stock: {1} has been blacklisted for its exchange being closed during runs!",
-                            algorithm.Time.ToString(),
-                            sd.Security.Symbol.Value
-                            ));
-                }
+            }
+            catch (Exception e)
+            {
+                throw new Exception(String.Format("Time: {0}. {1}. Exception in the first foreach loop. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message));
             }
 
             //if ALL stocks are blacklisted for not having new data or their exchange being closed
@@ -189,39 +254,60 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                 return _previousInsights;
             }
 
+            List<Insight> closedExchOrNoDataOrNoCons;
 
             // carry over insights that have exchange closed or missing data or did not consolidate, but did not hit threshold in that
-            List<Insight> closedExchOrNoDataOrNoCons =
-                ((from pi1 in _previousInsights
-                 join closedExch in stocksWithExchangeClosed
-                 on pi1.Symbol.Value equals closedExch
-                 select pi1)
-                 .Union(
-                 (from pi2 in _previousInsights
-                  join noData in stocksWithoutData
-                  on pi2.Symbol.Value equals noData
-                  select pi2))
-                  .Union(
-                    (from pi3 in _previousInsights
-                    join noCons in stocksNotConsolidated
-                    on pi3.Symbol.Value equals noCons
-                    select pi3)))
-                    .Distinct()
-                  .ToList();
+            try
+            {
+                closedExchOrNoDataOrNoCons =
+                    ((from pi1 in _previousInsights
+                      join closedExch in stocksWithExchangeClosed
+                  on pi1.Symbol.Value equals closedExch
+                      select pi1)
+                     .Union(
+                     (from pi2 in _previousInsights
+                      join noData in stocksWithoutData
+                      on pi2.Symbol.Value equals noData
+                      select pi2))
+                      .Union(
+                        (from pi3 in _previousInsights
+                         join noCons in stocksNotConsolidated
+                     on pi3.Symbol.Value equals noCons
+                         select pi3)))
+                        .Distinct()
+                      .ToList();
+            }
+            catch (Exception e)
+            {
+                throw new Exception(String.Format("Time: {0}. {1}. Exception while listing stocks without data or with exchange closed or not consolidated. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message));
+            }
 
-            List<Insight> insightsToBeCarriedOver =
-                (from ceondonc in closedExchOrNoDataOrNoCons
-                 join sd in _SymbolDataBySymbol.Values
-                 on ceondonc.Symbol.Value equals sd.Security.Symbol.Value
-                 where sd.ConsecutiveExchangeClosed <= _exchangeClosedThreshold &&
-                 sd.ConsecutiveMissingData <= _didNotGetDataTimesThreshold
-                 select ceondonc)
-                 .ToList();
+            List<Insight> insightsToBeCarriedOver;
+
+            try
+            {
+                insightsToBeCarriedOver =
+                    (from ceondonc in closedExchOrNoDataOrNoCons
+                     join sd in _SymbolDataBySymbol.Values.Where(x => x.Security.HasData)
+                     on ceondonc.Symbol.Value equals sd.Security.Symbol.Value
+                     where sd.ConsecutiveExchangeClosed <= _exchangeClosedThreshold &&
+                     sd.ConsecutiveMissingData <= _didNotGetDataTimesThreshold
+                     select ceondonc)
+                     .ToList();
+            }
+            catch (Exception e)
+            {
+                throw new Exception(String.Format("Time: {0}. {1}. Exception when listing insights to be carried over. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message));
+            }
 
             //new insights created for stocks with open exchange, data, that consolidated, that have SymbolData ready,
             //that have positive price in the consolidator
-            List<Insight> insightsNew =
-                (from sd in _SymbolDataBySymbol.Values
+            List<Insight> insightsNew;
+
+            try
+            {
+                insightsNew =
+                (from sd in _SymbolDataBySymbol.Values.Where(x => x.Security.HasData)
                  join inData in stocksWithData
                  on sd.Security.Symbol.Value equals inData
                  join openExch in stocksWithExchangeOpen
@@ -239,17 +325,24 @@ namespace QuantConnect.Algorithm.Framework.Alphas
                      null,
                      Name))
                 .ToList();
+            }
+            catch (Exception e)
+            {
+                throw new Exception(String.Format("Time: {0}. {1}. Exception creating new insights. Original exception: {2}", algorithm.Time.ToString(), this.Name, e.Message));
+            }
 
             _previousInsights = new List<Insight>();
             _previousInsights.AddRange(insightsToBeCarriedOver);
             _previousInsights.AddRange(insightsNew);
 
-            algorithm.Error(String.Format("Time: {0}. Returning {1} insights for {2} symbols.",
+            algorithm.Debug(String.Format("Time: {0}. Returning {1} insights for {2} symbols.",
                 algorithm.Time.ToString(),
                 _previousInsights.Count.ToString(),
                 _SymbolDataBySymbol.Count.ToString()));
 
+
             return _previousInsights;
+
         }
 
         /// <summary>
@@ -262,9 +355,10 @@ namespace QuantConnect.Algorithm.Framework.Alphas
         public override IEnumerable<Insight> Update(QCAlgorithmFramework algorithm, Slice data)
         {
             // if update was called by scheduler at is rebalance time
-            if (_rebalanceDate.GetDates(algorithm.Time.Date, algorithm.Time.Date).Count() == 1 &&
-                    _rebalanceTime.CreateUtcEventTimes( new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(h => h.Hour).Contains(algorithm.Time.Hour) &&
-                    _rebalanceTime.CreateUtcEventTimes( new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(m => m.Minute).Contains(algorithm.Time.Minute))
+            if ((algorithm.Time.Hour == 9 && algorithm.Time.Minute == 31) ||
+                (_rebalanceDate.GetDates(algorithm.Time.Date, algorithm.Time.Date).Count() == 1 &&
+                    _rebalanceTime.CreateUtcEventTimes(new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(h => h.Hour).Contains(algorithm.Time.Hour) &&
+                    _rebalanceTime.CreateUtcEventTimes(new List<DateTime>() { algorithm.Time.Date.ConvertToUtc(algorithm.TimeZone, false).Date }).Select(dtl => dtl.ConvertFromUtc(algorithm.TimeZone, false)).Select(m => m.Minute).Contains(algorithm.Time.Minute)))
             {
                 return UpdateMomBasedInsights(algorithm, data).ToList();
             }
@@ -274,61 +368,68 @@ namespace QuantConnect.Algorithm.Framework.Alphas
 
         public override void OnSecuritiesChanged(QCAlgorithmFramework algorithm, SecurityChanges changes)
         {
-            String universeName =
-                (from kvp in _alphaUniverse
-                 where kvp.Key == Name
-                 select kvp.Value)
-                 .Single();
-
-            IReadOnlyList < Security > removed =
-                (from c in changes.RemovedSecurities
-                 join us in algorithm.UniverseManager[universeName].Members
-                 on c.Symbol equals us.Key
-                 select c)
-                 .ToList<Security>();
-
-            IReadOnlyList<Security> added =
-                (from c in changes.AddedSecurities
-                 join us in algorithm.UniverseManager[universeName].Members
-                 on c.Symbol equals us.Key
-                 select c)
-                 .ToList<Security>();
-
-            // clean up data for removed securities
-            foreach (var r in removed)
+            try
             {
-                SymbolData data;
-                if (_SymbolDataBySymbol.TryGetValue(r.Symbol, out data))
-                {
-                    _SymbolDataBySymbol.Remove(r.Symbol);
-                    algorithm.SubscriptionManager.RemoveConsolidator(r.Symbol, data.TBConsolidator);
-                }
-            }
+                String universeName =
+                    (from kvp in _alphaUniverse
+                     where kvp.Key == Name
+                     select kvp.Value)
+                     .Single();
 
-            // initialize data for added securities
-            var addedSymbols = new List<Symbol>();
-            foreach (var a in added)
-            {
-                if (!_SymbolDataBySymbol.ContainsKey(a.Symbol))
-                {
-                    var symbolData = new SymbolData(algorithm, a, _momentumPeriod, _momentumResolution);
-                    _SymbolDataBySymbol[a.Symbol] = symbolData;
-                    addedSymbols.Add(symbolData.Security.Symbol);
-                }
-            }
+                IReadOnlyList<Security> removed =
+                    (from c in changes.RemovedSecurities
+                     join us in algorithm.UniverseManager[universeName].Members
+                     on c.Symbol equals us.Key
+                     select c)
+                     .ToList<Security>();
 
-            if (addedSymbols.Count > 0)
-            {
-                //warmup our indicators by pushing history through the consolidators
-                algorithm.History(addedSymbols, _momentumPeriod+1, _momentumResolution)
-                .PushThrough(bar =>
+                IReadOnlyList<Security> added =
+                    (from c in changes.AddedSecurities
+                     join us in algorithm.UniverseManager[universeName].Members
+                     on c.Symbol equals us.Key
+                     select c)
+                     .ToList<Security>();
+
+                // clean up data for removed securities
+                foreach (var r in removed)
                 {
-                    SymbolData symbolData;
-                    if (_SymbolDataBySymbol.TryGetValue(bar.Symbol, out symbolData))
+                    SymbolData data;
+                    if (_SymbolDataBySymbol.TryGetValue(r.Symbol, out data))
                     {
-                        symbolData.TBConsolidator.Update(bar);
+                        _SymbolDataBySymbol.Remove(r.Symbol);
+                        algorithm.SubscriptionManager.RemoveConsolidator(r.Symbol, data.TBConsolidator);
                     }
-                });
+                }
+
+                // initialize data for added securities
+                var addedSymbols = new List<Symbol>();
+                foreach (var a in added)
+                {
+                    if (!_SymbolDataBySymbol.ContainsKey(a.Symbol))
+                    {
+                        var symbolData = new SymbolData(algorithm, a, _momentumPeriod, _momentumResolution);
+                        _SymbolDataBySymbol[a.Symbol] = symbolData;
+                        addedSymbols.Add(symbolData.Security.Symbol);
+                    }
+                }
+
+                if (addedSymbols.Count > 0)
+                {
+                    //warmup our indicators by pushing history through the consolidators
+                    algorithm.History(addedSymbols, _momentumPeriod + 1, _momentumResolution)
+                    .PushThrough(bar =>
+                    {
+                        SymbolData symbolData;
+                        if (_SymbolDataBySymbol.TryGetValue(bar.Symbol, out symbolData))
+                        {
+                            symbolData.TBConsolidator.Update(bar);
+                        }
+                    });
+                }
+            }
+            catch (Exception e)
+            {
+                throw new Exception("Exception while changing securities in AlphaModel.");
             }
         }
 

@@ -6,7 +6,7 @@
   // two predefined environments, 'backtesting' and 'live', feel free
   // to add more!
 
-  "environment": "backtesting", // "live-paper", "backtesting", "live-interactive", "live-interactive-iqfeed"
+  "environment": "live-interactive", // "live-paper", "backtesting", "live-interactive", "live-interactive-iqfeed"
 
   // algorithm class selector
   "algorithm-type-name": "_QCWhatAlgo",
@@ -16,6 +16,7 @@
 
   //Physical DLL location
   "algorithm-location": "QuantConnect.Algorithm.Framework.dll",
+  //"algorithm-location": "QuantConnect.Algorithm.CSharp.dll",
   //"algorithm-location": "../../../Algorithm.Python/BasicTemplateFrameworkAlgorithm.py",
   //"algorithm-location": "QuantConnect.Algorithm.FSharp.dll",
   //"algorithm-location": "QuantConnect.Algorithm.VisualBasic.dll",
@@ -26,6 +27,8 @@
 
   // engine
   "data-folder": "../../../Data/_ibdl/",
+  "data-directory": "../../../Data/_ibdl/",
+  "cache-location": "../../../Data/_ibdl/",
 
   // handlers
   "log-handler": "QuantConnect.Logging.CompositeLogHandler",
@@ -61,7 +64,7 @@
   "live-data-port": 8020,
 
   // interactive brokers configuration
-  "ib-account": "DU1077530",
+  "ib-account": "DU1077530", //"U2521806",
   "ib-user-name": "pkowal494",
   "ib-password": "Pipilolo1",
   "ib-host": "127.0.0.1",

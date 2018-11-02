@@ -43,7 +43,7 @@ namespace QuantConnect.Algorithm.Framework.Selection
         {
         }
 
-         /// <summary>
+        /// <summary>
         /// Initializes a new instance of the <see cref="_QCWhatSelectionModel"/> class
         /// </summary>
         /// <param name="symbols">The symbols to subscribe to</param>
@@ -67,7 +67,7 @@ namespace QuantConnect.Algorithm.Framework.Selection
 
                 foreach (Symbol s in ls)
                 {
-                    SymbolCache.Set(s.Value, s);                   
+                    SymbolCache.Set(s.Value, s);
                 }
             }
         }
